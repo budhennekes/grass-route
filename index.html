@@ -141,7 +141,7 @@
       <div class="goalbar"><div class="goalfill" id="goalFill"></div></div>
       <div style="font-size:11px;color:#94a1b2;margin-top:4px;text-align:right" id="goalText">$0 / $20,000</div>
     </div>
-    <div class="sectionlabel">TODAY'S JOB BOARD</div>
+    <div class="sectionlabel" id="boardLabel">TODAY'S JOB BOARD</div>
     <div id="jobList"></div>
     <button class="btn ghost" id="shopBtn">🛠️ GARAGE &amp; SHOP</button>
     <div class="row" style="margin-top:10px">
@@ -189,6 +189,7 @@
   <div class="screen" id="screen-results">
     <h1 style="font-size:22px">JOB COMPLETE</h1>
     <div class="mood" id="resMood"></div>
+    <div id="resMedal" style="text-align:center;font-size:15px;font-weight:bold;margin-top:2px"></div>
     <div class="reaction" id="resReaction"></div>
     <div class="reaction" id="resTopper" style="display:none;color:var(--red)">You paid to mow this lawn.</div>
     <div class="pixelbox" id="resLines"></div>
@@ -204,6 +205,21 @@
       <button class="btn ghost" id="resShopBtn">SHOP</button>
     </div>
     <button class="btn ghost" id="shareBtn">📸 SHARE THIS HAUL</button>
+  </div>
+
+  <!-- END OF DAY -->
+  <div class="screen" id="screen-dayend">
+    <div style="font-size:48px;text-align:center;margin-top:32px">🌙</div>
+    <h1 style="font-size:24px">DAY <span id="deDay">1</span> DONE</h1>
+    <div class="sub" id="deFlavor"></div>
+    <div class="pixelbox" style="font-size:14px;line-height:1.9" id="deStats"></div>
+    <div class="pixelbox">
+      <div style="display:flex;justify-content:space-between;font-size:13px">
+        <span id="deGoalName">Savings goal</span><span class="cash" id="deCash">$0</span>
+      </div>
+      <div class="goalbar"><div class="goalfill" id="deGoalFill"></div></div>
+    </div>
+    <button class="btn gold" id="sleepBtn">😴 SLEEP → DAY <span id="deNext">2</span></button>
   </div>
 
   <!-- WIN (goal reached) -->
@@ -421,12 +437,16 @@ let P = {
   adTier: 0,                                // advertising level: 0-3
   goalReached: false,                       // win screen fired yet?
   settings: {sfx:true, music:true},
+  bests: {},                                // best profit per customer type
+  day: 1, jobsToday: 0, dayEarnings: 0,     // the summer calendar
   eggs: [],                                 // easter egg ids found
   upgrades: [],                             // upgrade ids owned
   cosmeticsOwned: ['rust'], equippedSkin: 'rust'
 };
 function loadSave(){ try{ const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if(s) P = Object.assign(P,s);}catch(e){}
-  P.settings = Object.assign({sfx:true, music:true}, P.settings||{}); }
+  P.settings = Object.assign({sfx:true, music:true}, P.settings||{});
+  if(!P.bests) P.bests = {};
+  if(P.day==null){ P.day=1; P.jobsToday=0; P.dayEarnings=0; } }
 function saveGame(){ localStorage.setItem(SAVE_KEY, JSON.stringify(P)); }
 function has(u){ return P.upgrades.includes(u); }
 
@@ -471,13 +491,15 @@ function makeJob(custId, name){
   const dims = ARCHETYPES[archetype].cols
     ? {cols:ARCHETYPES[archetype].cols, rows:ARCHETYPES[archetype].rows}
     : {cols:12, rows:tier>=3 ? 16 : 14};
+  const basePay = Math.round(randi(c.basePay[0], c.basePay[1]) * PAY_MULT[tier]);
   return {
     id: Math.random().toString(36).slice(2),
     name: name || pick(JOB_NAMES),
     level: lvl, tier, weather, archetype, special,
     payMult: PAY_MULT[tier],
     customerType: custId,
-    basePay: Math.round(randi(c.basePay[0], c.basePay[1]) * PAY_MULT[tier]),
+    basePay,
+    par: Math.round(basePay * 1.3),   // "good money here" — the silver line
     cols: dims.cols, rows: dims.rows,
     timeLimit: archetype==='postage' ? 70 : (tier>=3 ? 110 : 90),
     requiredCutPercent: c.requiredCut,
@@ -489,7 +511,7 @@ function makeTutorialJob(){
   const j = makeJob('dad', 'Your Own Backyard');
   return Object.assign(j, {
     tutorial:true, archetype:'tutorial', special:null, weather:'sunny',
-    cols:8, rows:8, timeLimit:120, basePay:20, tier:0, payMult:1,
+    cols:8, rows:8, timeLimit:120, basePay:20, par:26, tier:0, payMult:1,
     requiredCutPercent:0.5,
     obstacleCounts:{rock:1, poop:1, branch:1, toy:1, bigbranch:0, hose:0, flowers:0, sprinkler:0, anthill:0},
     specialRequest:'"Mom says the yard is yours now. She is paying $20. This is not negotiable."'
@@ -500,7 +522,7 @@ function makeContract(){
   const j = makeJob('dad', c.name);
   return Object.assign(j, {
     isContract:true, archetype:'contract', special:null,
-    cols:12, rows:18, timeLimit:180, basePay:c.pay, tier:0, payMult:2.5,
+    cols:12, rows:18, timeLimit:180, basePay:c.pay, par:Math.round(c.pay*1.3), tier:0, payMult:2.5,
     requiredCutPercent:0.75,
     obstacleCounts:{rock:4, branch:4, bigbranch:2, toy:2, poop:3, sprinkler:2, hose:1, flowers:1, anthill:2},
     specialRequest:c.quote
@@ -521,6 +543,8 @@ function renderHome(){
   const pct = Math.min(100, P.cash/P.goal*100);
   $('goalFill').style.width = pct+'%';
   $('goalText').textContent = '$'+P.cash.toLocaleString()+' / $'+P.goal.toLocaleString();
+  if($('boardLabel')) $('boardLabel').textContent = (P.jobsDone===0)
+    ? 'FIRST JOB' : 'DAY '+P.day+' · JOB BOARD';
   const list = $('jobList'); list.innerHTML = '';
   jobBoard.forEach((job,idx)=>{
     const c = CUSTOMERS[job.customerType];
@@ -551,6 +575,7 @@ function openBrief(job){
     (job.special ? `<span style="color:var(--gold)">📌 Special request: ${SPECIALS[job.special].brief}</span><br>` : '')+
     `${WEATHER[job.weather].icon} ${WEATHER[job.weather].label}: ${WEATHER[job.weather].brief}<br>`+
     `💵 Base pay: <b class="cash">$${job.basePay}</b>${job.tier?' <span style="color:var(--gold)">'+'⭐'.repeat(job.tier)+' nicer street</span>':''}<br>`+
+    `🥈 Good money here: <b class="cash">~$${job.par}</b>${P.bests&&P.bests[job.customerType]?' <span style="color:#94a1b2">(your best: $'+P.bests[job.customerType]+')</span>':''}<br>`+
     `🎯 Wants at least <b>${Math.round(job.requiredCutPercent*100)}%</b> of the grass cut<br>`+
     `⏱ Time: ${job.timeLimit}s<br>`+
     `📋 ${c.trait}<br><br>${hazLines}`;
@@ -706,7 +731,7 @@ function startJob(job){
   const totalGrass = yard.grid.flat().filter(t=>t.t===T_GRASS && !t.glow).length;
   G = {
     job, ...yard,
-    mower:{ x:(yard.spawn.c+0.5)*TILE, y:(yard.spawn.r+0.5)*TILE, dir:0, jamUntil:0 },
+    mower:{ x:(yard.spawn.c+0.5)*TILE, y:(yard.spawn.r+0.5)*TILE, dir:0, jamUntil:0, vx:0, vy:0 },
     joy:{active:false, bx:0, by:0, dx:0, dy:0},
     keys:{},
     timeLeft: job.timeLimit,
@@ -885,16 +910,22 @@ function update(dt, now){
   }
   if(now*1000 < m.jamUntil) speed = 0;
 
+  // momentum: ramp velocity toward the target so the mower has weight
+  const tvx = (mag>0.15 && speed>0) ? Math.cos(m.dir)*speed*mag : 0;
+  const tvy = (mag>0.15 && speed>0) ? Math.sin(m.dir)*speed*mag : 0;
+  const accel = (mag>0.15 ? 9 : 12) * dt;   // brake faster than you launch
+  m.vx += (tvx - m.vx) * Math.min(1, accel);
+  m.vy += (tvy - m.vy) * Math.min(1, accel);
+
   // move with axis-separated collision (slides along solids)
   const half = TILE*0.32;
-  if(mag>0.15 && speed>0){
-    const nx = m.x + Math.cos(m.dir)*speed*mag*dt;
-    const ny = m.y + Math.sin(m.dir)*speed*mag*dt;
+  if(Math.abs(m.vx) > 1 || Math.abs(m.vy) > 1){
+    const nx = m.x + m.vx*dt, ny = m.y + m.vy*dt;
     const tx = tileAt(nx,m.y), ty = tileAt(m.x,ny);
     if(tx && !isSolid(tx.r,tx.c)) m.x = Math.max(half, Math.min(cvs.width-half, nx));
-    else bump(now);
+    else { m.vx = 0; bump(now); }
     if(ty && !isSolid(ty.r,ty.c)) m.y = Math.max(half, Math.min(cvs.height-half, ny));
-    else bump(now);
+    else { m.vy = 0; bump(now); }
   }
 
   // cut current tile (+ neighbors with wide deck)
@@ -1086,10 +1117,14 @@ function cutTile(r,c,now){
   t.cutDir = movingV ? 'v' : 'h';   // stripe banding follows how you mowed this tile
   if(movingV) G.stripeV++; else G.stripeH++;
   G.combo++; G.bestCombo = Math.max(G.bestCombo, G.combo);
-  // clippings
-  for(let i=0;i<3;i++) G.particles.push({x:c*TILE+rand(4,TILE-4), y:r*TILE+rand(4,TILE-4),
-    vx:rand(-30,30), vy:rand(-60,-10), life:0.5, color: t.smear?'#8d6e63':'#9ccc65'});
-  if(now - lastCutBeep > 0.09){ lastCutBeep = now; beep(660+G.combo*4, 0.03, 'square', 0.025); buzz(4); }
+  // clippings: a fuller spray that fans out behind the mower, richer as the streak builds
+  const burst = 4 + Math.min(4, Math.floor(G.combo/12));
+  for(let i=0;i<burst;i++) G.particles.push({x:c*TILE+rand(4,TILE-4), y:r*TILE+rand(4,TILE-4),
+    vx:rand(-45,45)-G.mower.vx*0.15, vy:rand(-75,-15)-G.mower.vy*0.15, life:rand(0.4,0.7),
+    color: t.smear?'#8d6e63':(i%3?'#9ccc65':'#7cb342')});
+  // mow tone climbs with the streak, then caps so it never gets shrill
+  if(now - lastCutBeep > 0.085){ lastCutBeep = now;
+    beep(600 + Math.min(340, G.combo*6), 0.03, 'square', 0.022); buzz(4); }
   updateHud();
 }
 
@@ -1144,6 +1179,8 @@ window.addEventListener('keydown', e=>{
     else if(['1','2','3','4'].includes(e.key)) showTab(['gear','ads','skins','eggs'][+e.key-1]);
   } else if(s==='win'){
     if(e.key==='Enter') $('winHomeBtn').click();
+  } else if(s==='dayend'){
+    if(e.key==='Enter') $('sleepBtn').click();
   }
 });
 
@@ -1408,8 +1445,26 @@ function endJob(early){
   }
   P.cash = Math.max(0, P.cash + profit);
   P.jobsDone++;
+  lastWasTutorial = !!job.tutorial;
+  if(!job.tutorial){
+    P.jobsToday = (P.jobsToday||0) + 1;
+    P.dayEarnings = (P.dayEarnings||0) + profit;
+  }
+  jobBoard = jobBoard.filter(j => j.id !== job.id);   // done jobs leave the board
   stopMusic();
   $('tutHint').style.display = 'none';
+  // medal vs par + personal best (tutorial has no medal)
+  const par = job.par || Math.round(job.basePay*1.3);
+  let medal = null;
+  if(!job.tutorial){
+    if(profit >= par*1.25) medal = {icon:'🥇', name:'GOLD', col:'#ffcd75'};
+    else if(profit >= par)  medal = {icon:'🥈', name:'SILVER', col:'#cfd8dc'};
+    else if(profit >= par*0.6) medal = {icon:'🥉', name:'BRONZE', col:'#c8905a'};
+  }
+  const bestKey = job.isContract ? 'contract' : job.customerType;
+  const prevBest = P.bests[bestKey] || 0;
+  const isBest = !job.tutorial && profit > prevBest;
+  if(isBest) P.bests[bestKey] = profit;
   // share-card data
   const eggLine = G.pickups.find(p=>p.label.startsWith('Found:'));
   const worstHit = G.damages.length ? G.damages.reduce((a,b)=>a.cost>=b.cost?a:b) : null;
@@ -1430,6 +1485,11 @@ function endJob(early){
 
   // render results
   $('resMood').textContent = cust.face+' '+face;
+  const md = $('resMedal');
+  if(medal){ md.innerHTML = `<span style="color:${medal.col}">${medal.icon} ${medal.name}</span>`+
+    (isBest?' <span style="color:var(--green)">NEW BEST!</span>':'')+
+    ` <span style="color:#94a1b2;font-weight:normal">(par $${par})</span>`; }
+  else { md.innerHTML = `<span style="color:#94a1b2">No medal. Par was $${par}.</span>`; }
   $('resReaction').textContent = cust.reactions[tier];
   const box = $('resLines'); box.innerHTML='';
   lines.forEach(l=>{
@@ -1534,10 +1594,38 @@ function renderShop(){
 }
 
 /* ---------- wiring ---------- */
+// A day is the current board of regular jobs. When they're all done, the day ends.
+let lastWasTutorial = false;
+function goHome(){
+  const regularLeft = jobBoard.filter(j => !j.isContract).length;
+  if(regularLeft === 0){ renderDayEnd(); show('dayend'); }
+  else { renderHome(); show('home'); }
+}
+function renderDayEnd(){
+  const g = GOAL_OPTIONS.find(x=>x.name===P.goalName);
+  $('deDay').textContent = P.day;
+  $('deNext').textContent = P.day+1;
+  $('deStats').innerHTML =
+    `🚜 Jobs today: <b>${P.jobsToday}</b><br>`+
+    `💵 Earned today: <b class="cash">${P.dayEarnings>=0?'+':'-'}$${Math.abs(P.dayEarnings)}</b><br>`+
+    `🏦 In the jar: <b class="cash">$${P.cash.toLocaleString()}</b>`;
+  const flavors = ['The mower cools in the garage.','Your hands smell like summer.',
+    'Somewhere a sprinkler ticks on.','Tomorrow the grass grows back.','You earned the couch tonight.'];
+  $('deFlavor').textContent = flavors[P.day % flavors.length];
+  $('deGoalName').textContent = (g?g.icon+' ':'')+P.goalName;
+  $('deCash').textContent = '$'+P.cash.toLocaleString()+' / $'+P.goal.toLocaleString();
+  $('deGoalFill').style.width = Math.min(100, P.cash/P.goal*100)+'%';
+}
+$('sleepBtn').onclick = ()=>{
+  P.day++; P.jobsToday = 0; P.dayEarnings = 0; saveGame();
+  rollJobBoard(); renderHome(); show('home');
+  beep(392,0.12,'sine',0.04); beep(523,0.14,'sine',0.04);
+};
+
 $('startJobBtn').onclick = ()=> startJob(currentJob);
 $('briefBackBtn').onclick = ()=> show('home');
 $('shopBtn').onclick = ()=>{ renderShop(); showTab('gear'); show('shop'); };
-$('shopBackBtn').onclick = ()=>{ rollJobBoard(); renderHome(); show('home'); };
+$('shopBackBtn').onclick = ()=>{ goHome(); };
 
 // ---------- start over ----------
 let restartArmed = false, restartTimer = null;
@@ -1611,13 +1699,18 @@ function renderWin(){
     `📦 Weird stuff found: <b>${P.eggs.length}/${EGGS.length}</b>`;
   $('winPayoff').textContent = WIN_PAYOFFS[g?g.id:'college'] || WIN_PAYOFFS.college;
 }
-$('winHomeBtn').onclick = ()=>{ rollJobBoard(); renderHome(); show('home'); };
+$('winHomeBtn').onclick = ()=>{
+  // winning caps the day; start the next one fresh
+  P.day++; P.jobsToday = 0; P.dayEarnings = 0; saveGame();
+  rollJobBoard(); renderHome(); show('home');
+};
 
 $('resHomeBtn').onclick = ()=>{
   if(pendingWin){ pendingWin = false; renderWin(); show('win');
     beep(523,0.12); beep(659,0.12); setTimeout(()=>beep(784,0.15),130); setTimeout(()=>beep(1046,0.25),280);
     return; }
-  rollJobBoard(); renderHome(); show('home');
+  if(lastWasTutorial){ lastWasTutorial = false; rollJobBoard(); renderHome(); show('home'); return; }
+  goHome();
 };
 $('resShopBtn').onclick = ()=>{ renderShop(); showTab('gear'); show('shop'); };
 
