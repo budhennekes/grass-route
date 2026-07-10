@@ -245,6 +245,7 @@
       <div class="pixelbox" id="eggBox" style="margin-top:8px"></div>
     </div>
     <button class="btn ghost backlink" id="shopBackBtn">Back to jobs</button>
+    <button class="btn ghost" id="restartBtn" style="margin-top:8px;font-size:13px;color:#94a1b2">🔄 Start a New Summer</button>
   </div>
 
 </div>
@@ -1446,6 +1447,8 @@ const AD_NOTES = [
 ];
 function renderShop(){
   $('shopCash').textContent = '$'+P.cash.toLocaleString();
+  restartArmed = false; clearTimeout(restartTimer);
+  if($('restartBtn')){ $('restartBtn').textContent='🔄 Start a New Summer'; $('restartBtn').style.color='#94a1b2'; }
   // advertising ladder
   const al = $('adList'); al.innerHTML='';
   ADS.forEach((ad,i)=>{
@@ -1520,6 +1523,22 @@ $('startJobBtn').onclick = ()=> startJob(currentJob);
 $('briefBackBtn').onclick = ()=> show('home');
 $('shopBtn').onclick = ()=>{ renderShop(); showTab('gear'); show('shop'); };
 $('shopBackBtn').onclick = ()=>{ rollJobBoard(); renderHome(); show('home'); };
+
+// ---------- start over ----------
+let restartArmed = false, restartTimer = null;
+$('restartBtn').onclick = ()=>{
+  if(!restartArmed){
+    restartArmed = true;
+    $('restartBtn').textContent = '⚠️ Erase everything and start over? Tap again';
+    $('restartBtn').style.color = 'var(--red)';
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(()=>{ restartArmed=false; $('restartBtn').textContent='🔄 Start a New Summer';
+      $('restartBtn').style.color='#94a1b2'; }, 4000);
+    return;
+  }
+  localStorage.removeItem(SAVE_KEY);
+  location.reload();
+};
 // ---------- share card ----------
 let lastSummary = null;
 $('shareBtn').addEventListener('click', ()=>{
