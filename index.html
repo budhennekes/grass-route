@@ -741,7 +741,7 @@ function startJob(job){
     damages:[],          // {label, cost}
     pickups:[],          // {label, bonus}
     lastHoseJam:0, lastBumpJam:0,
-    particles:[], shake:0,
+    particles:[], shake:0, callout:null,
     nextSpray: 8,
     weather: job.weather, antsUntil:0, nextRainWet:0,
     stripeV:0, stripeH:0, glowPenalized:false,
@@ -1113,10 +1113,20 @@ function cutTile(r,c,now){
   }
   if(G.smearLeft>0 && !t.smear){ t.smear=true; G.smearLeft--; }
   G.cutCount++;
+  t.cutAt = now;   // timestamp for the fresh-cut pop
   const movingV = Math.abs(Math.sin(G.mower.dir))>0.7;
   t.cutDir = movingV ? 'v' : 'h';   // stripe banding follows how you mowed this tile
   if(movingV) G.stripeV++; else G.stripeH++;
   G.combo++; G.bestCombo = Math.max(G.bestCombo, G.combo);
+  // flow callouts: a streak that survives builds into little arcade hits
+  const MILE = {15:'NICE', 30:'CLEAN', 50:'PRISTINE', 80:'IMMACULATE', 120:'LEGENDARY'};
+  if(MILE[G.combo]){
+    G.callout = {text:MILE[G.combo], at:now};
+    G.shake = Math.max(G.shake, 3);
+    const notes = [523,659,784,1046,1318];
+    notes.forEach((f,i)=> setTimeout(()=>beep(f,0.09,'square',0.04), i*55));
+    buzz(30);
+  }
   // clippings: a fuller spray that fans out behind the mower, richer as the streak builds
   const burst = 4 + Math.min(4, Math.floor(G.combo/12));
   for(let i=0;i<burst;i++) G.particles.push({x:c*TILE+rand(4,TILE-4), y:r*TILE+rand(4,TILE-4),
@@ -1233,6 +1243,10 @@ function render(now){
       if(t.cutDir==='v'){ ctx.fillRect(x+7,y,2,TILE); ctx.fillRect(x+18,y,2,TILE); ctx.fillRect(x+26,y,2,TILE); }
       else { ctx.fillRect(x,y+7,TILE,2); ctx.fillRect(x,y+18,TILE,2); ctx.fillRect(x,y+26,TILE,2); }
       if(t.smear){ ctx.fillStyle='#795548aa'; ctx.fillRect(x+4,y+10,TILE-8,5); ctx.fillRect(x+8,y+20,TILE-14,4); }
+      // fresh-cut pop: a quick bright flash the instant a tile is mowed
+      const cutAge = now - (t.cutAt||0);
+      if(cutAge < 0.22){ const a = (1 - cutAge/0.22);
+        ctx.fillStyle = 'rgba(220,255,180,'+(a*0.55)+')'; ctx.fillRect(x,y,TILE,TILE); }
     } else if(t.t===T_FLOWER){
       ctx.fillStyle = '#3d8b40'; ctx.fillRect(x,y,TILE,TILE);
       ctx.fillStyle = '#f06292'; ctx.fillRect(x+6,y+6,5,5); ctx.fillRect(x+20,y+16,5,5);
@@ -1368,11 +1382,37 @@ function render(now){
     ctx.stroke();
   }
 
+  // flow glow: the longer your clean streak, the more the edges warm up
+  if(G.combo >= 10){
+    const g = Math.min(0.5, (G.combo-10)/120 + 0.12);
+    const grad = ctx.createRadialGradient(cvs.width/2, cvs.height/2, cvs.height*0.3,
+      cvs.width/2, cvs.height/2, cvs.height*0.72);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(120,255,140,'+g+')');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,cvs.width,cvs.height);
+  }
+
   // floating joystick
   if(G.joy.active){
     ctx.fillStyle='#ffffff22'; ctx.beginPath(); ctx.arc(G.joy.bx,G.joy.by,TILE*1.3,0,7); ctx.fill();
     ctx.fillStyle='#ffffff55'; ctx.beginPath();
     ctx.arc(G.joy.bx+G.joy.dx*TILE, G.joy.by+G.joy.dy*TILE, TILE*0.5,0,7); ctx.fill();
+  }
+
+  // flow callout ("NICE", "CLEAN", ...) pops big, rises, and fades
+  if(G.callout){
+    const age = now - G.callout.at;
+    if(age < 1.1){
+      const a = 1 - age/1.1, rise = age*30;
+      ctx.save();
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.font = 'bold '+(30 + (1-a)*10)+'px "Courier New", monospace';
+      ctx.fillStyle = 'rgba(20,40,15,'+(a*0.6)+')';
+      ctx.fillText(G.callout.text, cvs.width/2+2, cvs.height*0.34 - rise + 2);
+      ctx.fillStyle = 'rgba(255,231,120,'+a+')';
+      ctx.fillText(G.callout.text, cvs.width/2, cvs.height*0.34 - rise);
+      ctx.restore();
+    } else G.callout = null;
   }
   ctx.restore();
 }
@@ -1498,13 +1538,27 @@ function endJob(early){
     box.appendChild(el);
   });
   const tot = document.createElement('div'); tot.className='rline rtotal';
-  tot.innerHTML = `<span><b>FINAL PROFIT</b></span><span class="amt ${profit>=0?'plus':'minus'}"><b>${profit>=0?'+':'-'}$${Math.abs(profit)}</b></span>`;
+  const totAmt = document.createElement('span'); totAmt.className = 'amt '+(profit>=0?'plus':'minus');
+  tot.innerHTML = `<span><b>FINAL PROFIT</b></span>`;
+  totAmt.innerHTML = `<b>${profit>=0?'+':'-'}$0</b>`;
+  tot.appendChild(totAmt);
   box.appendChild(tot);
   $('resCash').textContent = '$'+P.cash.toLocaleString()+' / $'+P.goal.toLocaleString();
   $('resGoalFill').style.width = Math.min(100,P.cash/P.goal*100)+'%';
   show('results');
   [...box.children].forEach((el,i)=> setTimeout(()=>{ el.classList.add('show'); beep(500+i*60,0.05,'square',0.03); }, 180*i+200));
-  setTimeout(()=>{ beep(523,0.1); beep(659,0.1); setTimeout(()=>beep(784,0.18),110); }, 180*lines.length+400);
+  // count the total up so the money lands with weight
+  const total = profit, sign = total>=0?'+':'-', absT = Math.abs(total);
+  setTimeout(()=>{
+    let shown = 0; const step = Math.max(1, Math.round(absT/24));
+    const tick = setInterval(()=>{
+      shown = Math.min(absT, shown+step);
+      totAmt.innerHTML = `<b>${sign}$${shown}</b>`;
+      beep(600 + shown*2, 0.02, 'square', 0.02);
+      if(shown>=absT){ clearInterval(tick);
+        beep(523,0.1); beep(659,0.1); setTimeout(()=>beep(784,0.18),110); }
+    }, 32);
+  }, 180*lines.length+300);
   G = null;
 }
 
