@@ -562,7 +562,7 @@ function openBrief(job){
    ========================================================= */
 const TILE = 32;
 const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const KEY_HINT = IS_TOUCH ? '' : ' (E)';   // desktop players get the hotkey hint on the button
+const KEY_HINT = IS_TOUCH ? '' : ' (E / click)';   // desktop players get the hotkey hint on the button
 const cvs = $('game'), ctx = cvs.getContext('2d');
 let G = null;            // live game state
 let rafId = null, lastT = 0;
@@ -820,9 +820,23 @@ function joyEnd(e){ if(!G) return; G.joy.active=false; G.joy.dx=0; G.joy.dy=0; }
 cvs.addEventListener('touchstart',joyStart,{passive:false});
 cvs.addEventListener('touchmove',joyMove,{passive:false});
 cvs.addEventListener('touchend',joyEnd);
-cvs.addEventListener('mousedown',joyStart);
-window.addEventListener('mousemove',joyMove);
-window.addEventListener('mouseup',joyEnd);
+
+// Mouse: drag steers (like the joystick), but a quick click that barely moves
+// picks up. Lets a WASD player keep the left hand on keys and pick up with the mouse.
+let mDownX=0, mDownY=0, mDownT=0;
+cvs.addEventListener('mousedown', e=>{
+  if(!G||G.over) return;
+  mDownX=e.clientX; mDownY=e.clientY; mDownT=performance.now();
+  joyStart(e);
+});
+window.addEventListener('mousemove', joyMove);
+window.addEventListener('mouseup', e=>{
+  if(!G) return;
+  const moved = Math.hypot(e.clientX-mDownX, e.clientY-mDownY);
+  const quick = performance.now()-mDownT < 350;
+  joyEnd(e);
+  if(moved < 8 && quick && !G.over){ $('pickupBtn').click(); }   // it was a click, not a drag
+});
 
 // ---------- helpers ----------
 function tileAt(x,y){ const c=Math.floor(x/TILE), r=Math.floor(y/TILE);
@@ -948,7 +962,8 @@ function update(dt, now){
     const cutPct = G.cutCount/G.totalGrass;
     const poopAlive = G.obstacles.some(o=>o.type==='poop' && o.alive);
     if(G.tutStep===0 && G.cutCount>=6){ G.tutStep=1;
-      $('tutHint').textContent = '💩 Do NOT mow that. Get close and hit PICK UP (E)'; }
+      $('tutHint').textContent = IS_TOUCH ? '💩 Do NOT mow that. Get close and tap PICK UP'
+        : '💩 Do NOT mow that. Get close and click it (or press E)'; }
     else if(G.tutStep===1 && !poopAlive){ G.tutStep=2;
       $('tutHint').textContent = '🪨 Gray tips in tall grass are rocks. Steer around them'; }
     else if(G.tutStep===2 && cutPct>=0.4){ G.tutStep=3;
