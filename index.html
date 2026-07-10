@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Grass Route</title>
+<style>
+  :root{
+    --bg:#1a1c2c; --panel:#29366f; --panel2:#3b5dc9; --ink:#f4f4f4;
+    --gold:#ffcd75; --green:#38b764; --green2:#257179; --red:#b13e53;
+    --grass-dark:#2e7d32; --grass-light:#66bb4a;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:var(--bg)}
+  body{font-family:"Courier New",monospace;color:var(--ink);display:flex;justify-content:center}
+  #app{width:100%;max-width:430px;height:100%;display:flex;flex-direction:column;position:relative;background:var(--bg)}
+  .screen{position:absolute;inset:0;display:none;flex-direction:column;overflow-y:auto;padding:16px 14px calc(20px + env(safe-area-inset-bottom))}
+  .screen.active{display:flex}
+  h1{font-size:30px;letter-spacing:2px;color:var(--green);text-shadow:3px 3px 0 #14532d;text-align:center}
+  .sub{text-align:center;color:#94a1b2;font-size:12px;margin-top:2px}
+  .pixelbox{background:var(--panel);border:3px solid #000;box-shadow:0 4px 0 #000;border-radius:4px;padding:12px;margin-top:12px}
+  .goalbar{height:18px;background:#111;border:2px solid #000;border-radius:3px;overflow:hidden;margin-top:6px}
+  .goalfill{height:100%;background:linear-gradient(90deg,var(--green),var(--gold));width:0%;transition:width .6s}
+  .cash{color:var(--gold);font-weight:bold}
+  .jobcard{background:var(--panel);border:3px solid #000;box-shadow:0 4px 0 #000;border-radius:4px;padding:10px 12px;margin-top:12px;cursor:pointer;transition:transform .08s}
+  .jobcard:active{transform:translateY(3px);box-shadow:0 1px 0 #000}
+  .jobtop{display:flex;justify-content:space-between;align-items:center}
+  .jobname{font-weight:bold;font-size:15px}
+  .jobpay{color:var(--gold);font-weight:bold;font-size:15px}
+  .jobquote{font-size:12px;color:#c8d0e0;font-style:italic;margin-top:6px}
+  .jobhaz{font-size:12px;margin-top:6px;color:#94a1b2}
+  .btn{display:block;width:100%;padding:12px;margin-top:12px;font-family:inherit;font-size:16px;font-weight:bold;
+    background:var(--green);color:#0b2e13;border:3px solid #000;box-shadow:0 4px 0 #000;border-radius:4px;cursor:pointer}
+  .btn:active{transform:translateY(3px);box-shadow:0 1px 0 #000}
+  .btn.gold{background:var(--gold);color:#4a3200}
+  .btn.ghost{background:var(--panel2);color:var(--ink)}
+  .btn.small{width:auto;display:inline-block;padding:8px 12px;font-size:13px;margin-top:8px}
+  .btn:disabled{opacity:.45;pointer-events:none}
+  .row{display:flex;gap:10px}.row .btn{flex:1}
+  /* gameplay */
+  #screen-play{padding:0}
+  #hud{margin:8px 10px 4px;background:var(--panel);border:3px solid #000;box-shadow:0 3px 0 #000;border-radius:6px;
+    padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+  #hudNetWrap{display:flex;flex-direction:column;line-height:1}
+  #hudNetLabel{font-size:10px;color:#94a1b2;letter-spacing:1px}
+  #hudNet{font-size:30px;font-weight:bold;color:var(--green);text-shadow:2px 2px 0 #000}
+  #hudNet.neg{color:var(--red)}
+  #hudStats{display:flex;gap:14px;font-size:15px;text-align:center}
+  #hudStats .stat{display:flex;flex-direction:column;line-height:1.15}
+  #hudStats .stat b{font-size:18px;color:var(--gold)}
+  #hudStats .stat.combo b{color:#ff9838}
+  #hudStats .lbl{font-size:9px;color:#94a1b2;letter-spacing:.5px;margin-top:2px}
+  #canvaswrap{position:relative;flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+  canvas{image-rendering:pixelated;touch-action:none;border:3px solid #000;border-radius:4px;background:#000;max-width:100%;max-height:100%}
+  #playbtns{display:flex;gap:10px;padding:10px 12px calc(12px + env(safe-area-inset-bottom))}
+  #pickupBtn{flex:1;padding:14px;font-size:15px}
+  #finishBtn{width:110px;padding:14px;font-size:13px}
+  #toast{position:absolute;top:54px;left:50%;transform:translateX(-50%);background:#000c;padding:6px 12px;border-radius:4px;
+    font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;z-index:5}
+  /* results */
+  .rline{display:flex;justify-content:space-between;padding:5px 2px;font-size:14px;opacity:0;transform:translateX(-8px);transition:all .3s}
+  .rline.show{opacity:1;transform:none}
+  .rline .amt{font-weight:bold}.amt.plus{color:var(--green)}.amt.minus{color:var(--red)}
+  .rtotal{border-top:2px dashed #556;margin-top:6px;padding-top:8px;font-size:17px}
+  .reaction{font-style:italic;font-size:13px;color:#c8d0e0;margin-top:10px;text-align:center}
+  .mood{font-size:34px;text-align:center;margin-top:4px}
+  /* shop */
+  .shopitem{display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:3px solid #000;
+    box-shadow:0 3px 0 #000;border-radius:4px;padding:10px 12px;margin-top:10px}
+  .shopitem .info{flex:1;padding-right:8px}
+  .shopitem .name{font-weight:bold;font-size:14px}
+  .shopitem .desc{font-size:11px;color:#94a1b2;margin-top:2px}
+  .shopitem button{font-family:inherit;font-weight:bold;padding:8px 12px;border:2px solid #000;border-radius:4px;
+    background:var(--gold);color:#4a3200;cursor:pointer;font-size:12px;white-space:nowrap}
+  .shopitem button.owned{background:var(--green2);color:var(--ink)}
+  .shopitem button:disabled{opacity:.4}
+  .sectionlabel{margin-top:18px;font-size:13px;color:var(--gold);letter-spacing:1px}
+  .backlink{margin-top:auto}
+  .flavor{font-size:11px;color:#94a1b2;text-align:center;margin-top:10px}
+  /* garage tabs */
+  .tabbar{display:flex;gap:4px;margin-top:12px}
+  .tab{flex:1;font-family:inherit;font-size:12px;font-weight:bold;padding:9px 2px;cursor:pointer;
+    background:var(--panel);color:#94a1b2;border:3px solid #000;border-bottom:none;border-radius:4px 4px 0 0}
+  .tab.active{background:var(--green);color:#0b2e13}
+  .tabpage{display:none;border-top:3px solid #000;padding-top:4px}
+  .tabpage.active{display:block}
+  .tabhint{font-size:11px;color:#94a1b2;font-style:italic;margin:8px 2px 2px}
+  #tutHint{display:none;margin:0 10px;padding:8px 10px;background:var(--gold);color:#4a3200;font-size:13px;
+    font-weight:bold;border:3px solid #000;border-radius:4px;text-align:center}
+  .jobcard.contract{border-color:var(--gold);box-shadow:0 4px 0 #7a5c00}
+  .setbtn{flex:1;font-family:inherit;font-size:11px;font-weight:bold;padding:8px 4px;cursor:pointer;
+    background:var(--panel);color:#94a1b2;border:3px solid #000;border-radius:4px}
+  /* setup */
+  .charbtn{flex:1;font-family:inherit;font-size:15px;font-weight:bold;padding:12px 8px;background:var(--panel2);
+    color:var(--ink);border:3px solid #000;border-radius:4px;cursor:pointer;line-height:1.4}
+  .charbtn .big{font-size:34px}
+  .charbtn.sel{background:var(--green);color:#0b2e13}
+  #nameInput{width:100%;margin-top:8px;padding:10px;font-family:inherit;font-size:16px;font-weight:bold;
+    background:#111;color:var(--ink);border:3px solid #000;border-radius:4px;outline:none}
+  .goalcard{background:var(--panel);border:3px solid #000;box-shadow:0 3px 0 #000;border-radius:4px;
+    padding:10px 12px;margin-top:10px;cursor:pointer;display:flex;align-items:center;gap:10px}
+  .goalcard.sel{background:var(--green2);border-color:var(--gold)}
+  .goalcard .gi{font-size:26px}
+  .goalcard .gname{font-weight:bold;font-size:14px}
+  .goalcard .gdesc{font-size:11px;color:#c8d0e0}
+  .goalcard .gamt{margin-left:auto;color:var(--gold);font-weight:bold;font-size:13px;white-space:nowrap}
+  .eggslot{display:inline-block;width:44px;text-align:center;font-size:20px;background:#111;border:2px solid #000;
+    border-radius:4px;padding:6px 0;margin:4px 3px 0 0}
+  .lockdesc{color:#7a8494 !important;font-style:italic}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- SETUP (new game) -->
+  <div class="screen" id="screen-setup">
+    <h1>GRASS ROUTE</h1>
+    <div class="sub">summer starts now</div>
+    <div class="sectionlabel">WHO'S MOWING?</div>
+    <div class="row">
+      <button class="charbtn sel" data-g="boy"><span class="big">👦</span><br>BOY</button>
+      <button class="charbtn" data-g="girl"><span class="big">👧</span><br>GIRL</button>
+    </div>
+    <input id="nameInput" maxlength="12" placeholder="Name (or stay 'Kid')" autocomplete="off">
+    <div class="sectionlabel">WHAT ARE YOU SAVING FOR?</div>
+    <div id="goalRow"></div>
+    <button class="btn" id="setupGoBtn">GRAB THE MOWER</button>
+    <div class="flavor">You can not change your childhood later. Choose wisely.</div>
+  </div>
+
+  <!-- HOME -->
+  <div class="screen active" id="screen-home">
+    <h1>GRASS ROUTE</h1>
+    <div class="sub">a lawn care hustle sim</div>
+    <div class="pixelbox">
+      <div style="display:flex;justify-content:space-between;font-size:13px">
+        <span id="goalLabel">Saving for: College</span>
+        <span class="cash" id="homeCash">$0</span>
+      </div>
+      <div class="goalbar"><div class="goalfill" id="goalFill"></div></div>
+      <div style="font-size:11px;color:#94a1b2;margin-top:4px;text-align:right" id="goalText">$0 / $20,000</div>
+    </div>
+    <div class="sectionlabel">TODAY'S JOB BOARD</div>
+    <div id="jobList"></div>
+    <button class="btn ghost" id="shopBtn">🛠️ GARAGE &amp; SHOP</button>
+    <div class="row" style="margin-top:10px">
+      <button class="setbtn" id="sfxBtn">🔊 SFX: ON</button>
+      <button class="setbtn" id="musicBtn">🎵 MUSIC: ON</button>
+    </div>
+    <div class="flavor" id="homeFlavor">Tip: not every blade of grass is worth your time. Profit is the score.</div>
+  </div>
+
+  <!-- BRIEFING -->
+  <div class="screen" id="screen-brief">
+    <h1 style="font-size:20px" id="briefName"></h1>
+    <div class="pixelbox">
+      <div style="font-size:36px;text-align:center" id="briefFace"></div>
+      <div style="text-align:center;font-weight:bold;margin-top:4px" id="briefCustomer"></div>
+      <div class="jobquote" style="text-align:center" id="briefQuote"></div>
+    </div>
+    <div class="pixelbox" style="font-size:13px;line-height:1.7" id="briefDetails"></div>
+    <button class="btn" id="startJobBtn">START MOWING</button>
+    <button class="btn ghost" id="briefBackBtn">Back</button>
+  </div>
+
+  <!-- GAMEPLAY -->
+  <div class="screen" id="screen-play">
+    <div id="hud">
+      <div id="hudNetWrap">
+        <span id="hudNetLabel">PROFIT SO FAR</span>
+        <span id="hudNet">$0</span>
+      </div>
+      <div id="hudStats">
+        <span class="stat"><b id="hudTime">90</b><span class="lbl">⏱ SEC</span></span>
+        <span class="stat"><b id="hudCut">0%</b><span class="lbl">🌱 CUT</span></span>
+        <span class="stat combo"><b id="hudCombo">0</b><span class="lbl">🔥 STREAK</span></span>
+      </div>
+    </div>
+    <div id="tutHint"></div>
+    <div id="canvaswrap"><canvas id="game"></canvas><div id="toast"></div></div>
+    <div id="playbtns">
+      <button class="btn gold" id="pickupBtn" disabled>PICK UP</button>
+      <button class="btn ghost" id="finishBtn">DONE ✓</button>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="screen" id="screen-results">
+    <h1 style="font-size:22px">JOB COMPLETE</h1>
+    <div class="mood" id="resMood"></div>
+    <div class="reaction" id="resReaction"></div>
+    <div class="reaction" id="resTopper" style="display:none;color:var(--red)">You paid to mow this lawn.</div>
+    <div class="pixelbox" id="resLines"></div>
+    <div class="flavor" id="resNotice" style="display:none;color:var(--gold)"></div>
+    <div class="pixelbox">
+      <div style="display:flex;justify-content:space-between;font-size:13px">
+        <span>Savings goal</span><span class="cash" id="resCash">$0</span>
+      </div>
+      <div class="goalbar"><div class="goalfill" id="resGoalFill"></div></div>
+    </div>
+    <div class="row">
+      <button class="btn" id="resHomeBtn">NEXT JOB</button>
+      <button class="btn ghost" id="resShopBtn">SHOP</button>
+    </div>
+    <button class="btn ghost" id="shareBtn">📸 SHARE THIS HAUL</button>
+  </div>
+
+  <!-- WIN (goal reached) -->
+  <div class="screen" id="screen-win">
+    <div style="font-size:56px;text-align:center;margin-top:40px">🏆</div>
+    <h1 style="font-size:26px">YOU DID IT</h1>
+    <div class="sub" id="winSub">$20,000. One lawn at a time.</div>
+    <div class="pixelbox" style="text-align:center;font-size:14px;line-height:1.8" id="winStats"></div>
+    <div class="pixelbox" style="text-align:center;font-size:13px;color:#c8d0e0;font-style:italic" id="winPayoff"></div>
+    <button class="btn gold" id="winHomeBtn">KEEP MOWING</button>
+    <div class="flavor">Summer 2 is coming. The lawns are still out there.</div>
+  </div>
+
+  <!-- SHOP -->
+  <div class="screen" id="screen-shop">
+    <h1 style="font-size:22px">THE GARAGE</h1>
+    <div class="pixelbox" style="text-align:center;margin-top:8px">Wallet: <span class="cash" id="shopCash">$0</span></div>
+    <div class="flavor" id="shopMsg" style="display:none;color:var(--gold)"></div>
+    <div class="tabbar">
+      <button class="tab active" data-tab="gear">🛠️ Gear</button>
+      <button class="tab" data-tab="ads">📣 Ads</button>
+      <button class="tab" data-tab="skins">🎨 Skins</button>
+      <button class="tab" data-tab="eggs">📦 Shoebox</button>
+    </div>
+    <div class="tabpage active" id="tab-gear">
+      <div class="tabhint">Earn it, use it. This stuff actually changes how you mow.</div>
+      <div id="upgradeList"></div>
+    </div>
+    <div class="tabpage" id="tab-ads">
+      <div class="tabhint">Every dollar you spend here is a dollar not saved. Just saying.</div>
+      <div id="adList"></div>
+    </div>
+    <div class="tabpage" id="tab-skins">
+      <div class="tabhint">Pure vanity. Changes nothing. Buy them anyway.</div>
+      <div id="skinList"></div>
+    </div>
+    <div class="tabpage" id="tab-eggs">
+      <div class="tabhint">Weird stuff you found in the grass.</div>
+      <div class="pixelbox" id="eggBox" style="margin-top:8px"></div>
+    </div>
+    <button class="btn ghost backlink" id="shopBackBtn">Back to jobs</button>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+/* =========================================================
+   GRASS ROUTE - web prototype
+   Data models below mirror the planned Swift structs:
+   PlayerProgress, Customer, LawnJob, Obstacle, Upgrade,
+   Cosmetic, ResultSummary. Keep field names stable.
+   ========================================================= */
+
+// ---------- DATA: Customers ----------
+const CUSTOMERS = {
+  dad: {
+    id:'dad', name:'Normal Dad', face:'🧢',
+    basePay:[34,42], requiredCut:0.80, tipMult:1.0,
+    quote:'"Just make it look mowed before my brother visits. He counts stripes."',
+    trait:'Fair pay. Loves speed. Big speed bonus.',
+    speedBonusMult:2,
+    reactions:{
+      love:'"Done already? You are going on the fridge."',
+      happy:'"Solid work. The lawn looks employed."',
+      meh:'"It is... fine. My brother will notice."',
+      mad:'"I could have done this myself. I will not, but I could have."'
+    }
+  },
+  retiree: {
+    id:'retiree', name:'Picky Retiree', face:'👓',
+    basePay:[38,46], requiredCut:0.95, tipMult:0.8,
+    quote:'"I measure the edges. With a ruler. It is laminated."',
+    trait:'Wants 95% cut and perfect edges. Low tolerance for missed patches.',
+    speedBonusMult:1,
+    reactions:{
+      love:'"Acceptable. That is the highest compliment I have."',
+      happy:'"Good. There is a patch by the fence but I will allow it."',
+      meh:'"I found four missed spots. I have photographs."',
+      mad:'"My ruler and I are both disappointed."'
+    }
+  },
+  grandma: {
+    id:'grandma', name:'Nice Grandma', face:'👵',
+    basePay:[24,30], requiredCut:0.85, tipMult:2.2,
+    quote:'"The dog is friendly. The dog is also the problem."',
+    trait:'Lower base pay but tips like a legend. Yard full of dog surprises.',
+    speedBonusMult:1,
+    reactions:{
+      love:'"Sweetheart! Take this. No arguing with grandma."',
+      happy:'"Lovely job dear. I made lemonade you have to drink."',
+      meh:'"It is fine dear. Barnaby got out again, did he not."',
+      mad:'"Oh honey. Oh no. Oh honey."'
+    }
+  }
+};
+
+// ---------- DATA: Obstacles (defs mirror Obstacle struct) ----------
+const OBSTACLE_DEFS = {
+  rock:      {label:'hidden rocks', icon:'🪨', damageCost:6,  canPickup:false, note:'Blade damage -$6'},
+  poop:      {label:'dog poop',     single:'dog poop',    icon:'💩', damageCost:5,  canPickup:true,  pickupBonus:3, note:'Mow it: -$5 trail. Grab it: +$3'},
+  branch:    {label:'small branches',single:'small branch',icon:'🌿', damageCost:3, canPickup:true,  pickupBonus:1, note:'Dulls blade -$3, or pick up +$1'},
+  bigbranch: {label:'big branches', single:'big branch',  icon:'🪵', damageCost:2,  canPickup:true,  pickupBonus:2, note:'Jams mower. Pick up to clear'},
+  toy:       {label:'toys',         single:'toy',         icon:'🧸', damageCost:0,  canPickup:true,  pickupBonus:2, note:'Blocks path. Pick up +$2'},
+  sprinkler: {label:'sprinklers',   icon:'💦', damageCost:18, canPickup:false, note:'Mow one: -$18. They spray on a timer'},
+  hose:      {label:'garden hose',  icon:'🐍', damageCost:0,  canPickup:false, note:'Run it over: mower jam'},
+  flowers:   {label:'flower bed',   icon:'🌷', damageCost:8,  canPickup:false, note:'Drive through it: -$8 per flower'},
+  anthill:   {label:'anthills',     icon:'🐜', damageCost:0,  canPickup:false, note:'Mow one and find out'},
+  egg:       {label:'???',          icon:'✨', damageCost:0,  canPickup:false, note:'Secret'}   // hidden collectible, never listed
+};
+
+// ---------- DATA: Upgrades (unlockAt = jobs completed before it appears) ----------
+const UPGRADES = [
+  {id:'wheels',    name:'Better Wheels',   cost:60,  unlockAt:0, desc:'+25% mowing speed. Walk less, earn more.'},
+  {id:'sharpBlade',name:'Sharpened Blade', cost:45,  unlockAt:0, desc:'Small branches no longer dull your blade.'},
+  {id:'waterBottle',name:'Water Bottle',   cost:35,  unlockAt:0, desc:'Heat waves stop slowing you down.'},
+  {id:'shoes',     name:'Comfy Shoes',     cost:50,  unlockAt:0, desc:'+10% speed. Your ankles say thank you.'},
+  {id:'rockGuard', name:'Rock Guard',      cost:85,  unlockAt:3, desc:'Hidden rocks stop costing you money.'},
+  {id:'clipBag',   name:'Clipping Bag',    cost:70,  unlockAt:3, desc:'Grass cut bonus pays 50% more.'},
+  {id:'toolBelt',  name:'Tool Belt',       cost:95,  unlockAt:3, desc:'Grab poop, toys and branches from further away.'},
+  {id:'cdPlayer',  name:'CD Player',       cost:65,  unlockAt:6, desc:'Music. Clean streaks start earlier and pay double.'},
+  {id:'mulcher',   name:'Mulching Blade',  cost:110, unlockAt:6, requires:'sharpBlade', desc:'Small branches become money instead of problems.'},
+  {id:'wideDeck',  name:'Wider Deck',      cost:120, unlockAt:6, desc:'Cuts a wider path. Fewer passes, faster jobs.'},
+  {id:'ridingMower',name:'Riding Mower',   cost:800, unlockAt:12, desc:'Sit down. Cut wide. +50% speed and a wide deck. The endgame.'}
+];
+
+// ---------- DATA: Cosmetics (IAP-ready structure, no real money in MVP) ----------
+const COSMETICS = [
+  {id:'rust',     name:'Rust Bucket',     cost:0,   colors:{body:'#a5673f',accent:'#6b3f23'}, desc:'It came with the garage.'},
+  {id:'bubblegum',name:'Bubblegum',       cost:80,  colors:{body:'#f48fb1',accent:'#ad1457'}, desc:'Smells faintly of 1997.'},
+  {id:'flame',    name:'Flame Decals',    cost:100, colors:{body:'#d32f2f',accent:'#ffcd75'}, desc:'Does not make it faster. Feels faster.'},
+  {id:'alien',    name:'Alien Mower',     cost:150, colors:{body:'#64dd17',accent:'#1b5e20'}, desc:'Recovered from a crash site. Probably.'},
+  {id:'chrome',   name:'Chrome Dad',      cost:180, colors:{body:'#cfd8dc',accent:'#78909c'}, desc:'For mowing at exactly 8am on Saturday.'},
+  {id:'skull',    name:'Skull Mower',     cost:220, colors:{body:'#263238',accent:'#eceff1'}, desc:'The grass fears you now.'},
+  {id:'haunted',  name:'Haunted Mower',   cost:350, colors:{body:'#6a1b9a',accent:'#b39ddb'}, desc:'Sometimes it mows on its own. We do not discuss it.'},
+  {id:'gold',     name:'Gold Mower',      cost:500, colors:{body:'#ffcd75',accent:'#8d6e00'}, desc:'This is why you are not in college yet.'}
+];
+
+// ---------- DATA: Advertising tiers (buy in order, unlocks richer job boards) ----------
+const ADS = [
+  {name:'Paper Flyers',   cost:25,  desc:'Staple gun + telephone poles. Unlocks nicer streets (up to 1.6x pay).'},
+  {name:'Yard Signs',     cost:75,  desc:'MOWED BY '+'&#x2764;'+'. Unlocks premium blocks (up to 2.2x pay).'},
+  {name:'Local Paper Ad', cost:150, desc:'Page 12, next to the crossword. Unlocks estates (3x pay, huge lawns).'},
+  {name:'Radio Spot',     cost:400, desc:'30 seconds on the drive-time show. Rich streets (4.5x pay).'},
+  {name:'Little League Sponsor', cost:900, desc:'Your name on twelve tiny jerseys. The whole town calls (6x pay).'}
+];
+const PAY_MULT = [1, 1.6, 2.2, 3, 4.5, 6];
+
+// ---------- DATA: Mega contracts (big one-off jobs, appear after 8 jobs done) ----------
+const CONTRACTS = [
+  {name:'The City Park',            quote:'"The city thanks you. The geese do not."',            pay:260},
+  {name:'Community Golf Course',    quote:'"The greens must be perfect. The members are watching."', pay:320},
+  {name:'The Cemetery (day shift)', quote:'"Respectful lines. No shortcuts. They notice."',      pay:300}
+];
+
+// ---------- DATA: Easter eggs found while mowing ----------
+const EGGS = [
+  {id:'coin',   name:'Lucky Coin',        icon:'🪙'},
+  {id:'ball',   name:'Signed Baseball',   icon:'⚾'},
+  {id:'tape',   name:'Lost Mixtape',      icon:'📼'},
+  {id:'ring',   name:'Plastic Ring',      icon:'💍'},
+  {id:'marble', name:'Giant Marble',      icon:'🔮'},
+  {id:'army',   name:'Army Guy (missing arm)', icon:'🪖'},
+  {id:'tooth',  name:'Somebody\'s Tooth', icon:'🦷'},
+  {id:'glow',   name:'Weird Glowing Rock',icon:'🌟'}
+];
+
+// ---------- DATA: Weather ----------
+const WEATHER = {
+  sunny: {icon:'☀️', label:'Sunny',      brief:'Perfect mowing weather.'},
+  cloudy:{icon:'⛅', label:'Cloudy',     brief:'Nice and cool. No excuses.'},
+  rain:  {icon:'🌧️', label:'Light rain', brief:'Wet grass is slow grass.'},
+  heat:  {icon:'🥵', label:'Heat wave',  brief:'You will get tired. Hydrate or slow down.'}
+};
+
+// ---------- DATA: Yard archetypes (each one is a different routing puzzle) ----------
+const ARCHETYPES = {
+  open:    {name:'Open Yard',    desc:'A classic. No excuses.'},
+  postage: {name:'Postage Stamp',desc:'Tiny lot. In, out, paid.', cols:10, rows:10},
+  corner:  {name:'Corner Lot',   desc:'Half yard, half driveway.'},
+  maze:    {name:'Fenced Maze',  desc:'Fences with gaps. Plan your route.'},
+  orchard: {name:'The Orchard',  desc:'Trees in rows. Mow between them.'},
+  pool:    {name:'Pool Yard',    desc:'There is a pool. Do not mow the pool.'},
+  tutorial:{name:'Your Backyard',desc:'Where it all begins.'},
+  contract:{name:'Big Contract', desc:'Huge ground. Real money. Bring water.'}
+};
+
+// ---------- DATA: Special requests (rules that change how you mow) ----------
+const SPECIALS = {
+  glow:      {quote:'"Do not mow the glowing patch. I am serious."',
+              brief:'Leave the glowing tiles alone. Mowing them costs $20 and possibly more than that.'},
+  hiddenToys:{quote:'"My kid hid his toys in the grass again. Find all five."',
+              brief:'Five toys are out there. Pick up all 5 for a +$10 bonus.'},
+  stripes:   {quote:'"HOA regulation 4.2: stripes must run north-south."',
+              brief:'Mow mostly up-and-down: +$8. Sloppy stripes: -$4.'},
+  dogLoose:  {quote:'"Barnaby is out today. He is friendly. Good luck."',
+              brief:'The dog will chase you. He cannot be stopped, only avoided.'}
+};
+
+// ---------- DATA: Goals ----------
+const GOAL_OPTIONS = [
+  {id:'travel', icon:'✈️', name:'Travel the World', amount:8000,  desc:'See somewhere that is not this cul-de-sac.'},
+  {id:'sidebiz',icon:'🚀', name:'Start a Side Biz', amount:12000, desc:'Turn mowing money into an empire.'},
+  {id:'college',icon:'🎓', name:'College',          amount:20000, desc:'The big one. Books cost WHAT now?'}
+];
+const JOB_NAMES = ['Maple St. Corner Lot','The Hendersons','12 Birchwood Ln','Old Mill House','Cul-de-sac King',
+  'The Yellow House','Fence Guy\'s Place','Two Dogs Cottage','Sprinkler Manor','The Overgrowth','Porch Swing Place','Gnome Garden'];
+
+// ---------- PlayerProgress (save) ----------
+const SAVE_KEY = 'grassroute_save_v1';
+let P = {
+  cash: 0, goal: 20000, goalName: 'College', jobsDone: 0,
+  playerName: '', playerGender: 'boy',      // set on the setup screen
+  adTier: 0,                                // advertising level: 0-3
+  goalReached: false,                       // win screen fired yet?
+  settings: {sfx:true, music:true},
+  eggs: [],                                 // easter egg ids found
+  upgrades: [],                             // upgrade ids owned
+  cosmeticsOwned: ['rust'], equippedSkin: 'rust'
+};
+function loadSave(){ try{ const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if(s) P = Object.assign(P,s);}catch(e){}
+  P.settings = Object.assign({sfx:true, music:true}, P.settings||{}); }
+function saveGame(){ localStorage.setItem(SAVE_KEY, JSON.stringify(P)); }
+function has(u){ return P.upgrades.includes(u); }
+
+// ---------- Screens ----------
+const $ = id => document.getElementById(id);
+function show(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $('screen-'+name).classList.add('active');
+}
+
+// ---------- Job generation (LawnJob) ----------
+let jobBoard = [], currentJob = null;
+function rand(a,b){ return a + Math.random()*(b-a); }
+function randi(a,b){ return Math.floor(rand(a,b+1)); }
+function pick(arr){ return arr[randi(0,arr.length-1)]; }
+
+function makeJob(custId, name){
+  const c = CUSTOMERS[custId];
+  // difficulty ramps with experience: early jobs stay simple
+  const lvl = P.jobsDone<3 ? 1 : P.jobsDone<6 ? 2 : 3;
+  const tier = randi(0, P.adTier);          // advertising unlocks richer streets
+  const counts = {
+    rock: randi(1,2) + (tier>=2?1:0),
+    branch: custId==='retiree' ? randi(2,3) : randi(1,2),
+    toy: custId==='dad' ? randi(2,3) : randi(0,1),
+    poop: lvl>=2 ? (custId==='grandma'?randi(3,4):randi(0,1)) : (custId==='grandma'?1:0),
+    bigbranch: lvl>=2 ? randi(0,1) : 0,
+    hose: (lvl>=2 && Math.random()<0.7) ? 1 : 0,
+    flowers: lvl>=2 ? 1 : 0,
+    sprinkler: lvl>=3 ? 1 : 0,
+    anthill: lvl>=3 ? randi(0,2) : 0
+  };
+  const weather = lvl>=3
+    ? (()=>{ const r=Math.random(); return r<0.4?'sunny':r<0.65?'cloudy':r<0.85?'rain':'heat'; })()
+    : pick(['sunny','cloudy']);
+  // yard shape: rookies get simple lots; veterans see every archetype
+  const archetype = pick(lvl===1 ? ['open','open','postage']
+    : ['open','open','postage','corner','maze','orchard','pool']);
+  // mechanical special request on ~half of level 2+ jobs
+  const special = (lvl>=2 && Math.random()<0.5)
+    ? pick(['glow','hiddenToys','stripes','dogLoose']) : null;
+  const dims = ARCHETYPES[archetype].cols
+    ? {cols:ARCHETYPES[archetype].cols, rows:ARCHETYPES[archetype].rows}
+    : {cols:12, rows:tier>=3 ? 16 : 14};
+  return {
+    id: Math.random().toString(36).slice(2),
+    name: name || pick(JOB_NAMES),
+    level: lvl, tier, weather, archetype, special,
+    payMult: PAY_MULT[tier],
+    customerType: custId,
+    basePay: Math.round(randi(c.basePay[0], c.basePay[1]) * PAY_MULT[tier]),
+    cols: dims.cols, rows: dims.rows,
+    timeLimit: archetype==='postage' ? 70 : (tier>=3 ? 110 : 90),
+    requiredCutPercent: c.requiredCut,
+    obstacleCounts: counts,
+    specialRequest: special ? SPECIALS[special].quote : c.quote
+  };
+}
+function makeTutorialJob(){
+  const j = makeJob('dad', 'Your Own Backyard');
+  return Object.assign(j, {
+    tutorial:true, archetype:'tutorial', special:null, weather:'sunny',
+    cols:8, rows:8, timeLimit:120, basePay:20, tier:0, payMult:1,
+    requiredCutPercent:0.5,
+    obstacleCounts:{rock:1, poop:1, branch:1, toy:1, bigbranch:0, hose:0, flowers:0, sprinkler:0, anthill:0},
+    specialRequest:'"Mom says the yard is yours now. She is paying $20. This is not negotiable."'
+  });
+}
+function makeContract(){
+  const c = pick(CONTRACTS);
+  const j = makeJob('dad', c.name);
+  return Object.assign(j, {
+    isContract:true, archetype:'contract', special:null,
+    cols:12, rows:18, timeLimit:180, basePay:c.pay, tier:0, payMult:2.5,
+    requiredCutPercent:0.75,
+    obstacleCounts:{rock:4, branch:4, bigbranch:2, toy:2, poop:3, sprinkler:2, hose:1, flowers:1, anthill:2},
+    specialRequest:c.quote
+  });
+}
+function rollJobBoard(){
+  if(P.jobsDone===0){ jobBoard = [makeTutorialJob()]; return; }
+  const names = [...JOB_NAMES].sort(()=>Math.random()-0.5);
+  jobBoard = ['dad','retiree','grandma'].map((c,i)=>makeJob(c, names[i]));
+  jobBoard.sort(()=>Math.random()-0.5);
+  if(P.jobsDone>=8 && Math.random()<0.3) jobBoard.push(makeContract());
+}
+
+// ---------- Home render ----------
+function renderHome(){
+  $('homeCash').textContent = '$'+P.cash.toLocaleString();
+  $('goalLabel').textContent = (P.playerName||'Kid')+' · Saving for: '+P.goalName;
+  const pct = Math.min(100, P.cash/P.goal*100);
+  $('goalFill').style.width = pct+'%';
+  $('goalText').textContent = '$'+P.cash.toLocaleString()+' / $'+P.goal.toLocaleString();
+  const list = $('jobList'); list.innerHTML = '';
+  jobBoard.forEach((job,idx)=>{
+    const c = CUSTOMERS[job.customerType];
+    const hazIcons = Object.entries(job.obstacleCounts).filter(([k,v])=>v>0).map(([k])=>OBSTACLE_DEFS[k].icon).join(' ');
+    const el = document.createElement('div');
+    el.className = 'jobcard'+(job.isContract?' contract':'');
+    const stars = job.isContract ? '💼 ' : (job.tier ? '⭐'.repeat(job.tier)+' ' : '');
+    const numHint = IS_TOUCH ? '' : `<span style="color:#94a1b2">[${idx+1}]</span> `;
+    el.innerHTML = `<div class="jobtop"><span class="jobname">${numHint}${c.face} ${job.name}</span><span class="jobpay">${stars}~$${job.basePay}</span></div>
+      <div class="jobhaz">${WEATHER[job.weather].icon} ${c.name} · ${ARCHETYPES[job.archetype].name}${job.special?' · 📌':''} · ${hazIcons||'no hazards'}</div>
+      <div class="jobquote">${job.specialRequest}</div>`;
+    el.onclick = ()=>openBrief(job);
+    list.appendChild(el);
+  });
+}
+
+function openBrief(job){
+  currentJob = job;
+  const c = CUSTOMERS[job.customerType];
+  $('briefName').textContent = job.name.toUpperCase();
+  $('briefFace').textContent = c.face;
+  $('briefCustomer').textContent = c.name;
+  $('briefQuote').textContent = job.specialRequest;
+  const hazLines = Object.entries(job.obstacleCounts).filter(([k,v])=>v>0)
+    .map(([k,v])=>`${OBSTACLE_DEFS[k].icon} ${OBSTACLE_DEFS[k].label}: ${OBSTACLE_DEFS[k].note}`).join('<br>');
+  $('briefDetails').innerHTML =
+    `🏡 ${ARCHETYPES[job.archetype].name}: ${ARCHETYPES[job.archetype].desc}<br>`+
+    (job.special ? `<span style="color:var(--gold)">📌 Special request: ${SPECIALS[job.special].brief}</span><br>` : '')+
+    `${WEATHER[job.weather].icon} ${WEATHER[job.weather].label}: ${WEATHER[job.weather].brief}<br>`+
+    `💵 Base pay: <b class="cash">$${job.basePay}</b>${job.tier?' <span style="color:var(--gold)">'+'⭐'.repeat(job.tier)+' nicer street</span>':''}<br>`+
+    `🎯 Wants at least <b>${Math.round(job.requiredCutPercent*100)}%</b> of the grass cut<br>`+
+    `⏱ Time: ${job.timeLimit}s<br>`+
+    `📋 ${c.trait}<br><br>${hazLines}`;
+  show('brief');
+}
+
+/* =========================================================
+   GAMEPLAY
+   ========================================================= */
+const TILE = 32;
+const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const KEY_HINT = IS_TOUCH ? '' : ' (E)';   // desktop players get the hotkey hint on the button
+const cvs = $('game'), ctx = cvs.getContext('2d');
+let G = null;            // live game state
+let rafId = null, lastT = 0;
+
+// tile states
+const T_GRASS=0, T_CUT=1, T_FLOWER=2, T_TRAMPLED=3, T_PAVED=4, T_BLOCKED=5;
+
+function buildYard(job){
+  const {rows, cols} = job;
+  const grid = [];
+  for(let r=0;r<rows;r++){ grid.push([]);
+    for(let c=0;c<cols;c++) grid[r].push({t:T_GRASS, wetUntil:0, smear:false, seed:(r*31+c*17)%97});
+  }
+  // --- archetype shape first, then dressing ---
+  const arch = job.archetype || 'open';
+  const trees = []; let shed = null;
+  const fenceTiles = new Set(), poolTiles = new Set();
+  if(arch==='corner'){
+    // one quadrant is driveway
+    const qr = Math.floor(rows/3), qc = Math.floor(cols/2);
+    const top = Math.random()<0.5, left = Math.random()<0.5;
+    for(let r=0;r<qr;r++) for(let c=0;c<qc;c++){
+      const rr = top ? r : rows-1-r, cc = left ? c : cols-1-c;
+      grid[rr][cc].t = T_PAVED;
+    }
+  } else if(arch==='maze'){
+    // two fence lines with gaps
+    for(const fr of [Math.floor(rows/3), Math.floor(rows*2/3)]){
+      const gap = randi(1, cols-3);
+      for(let c=0;c<cols;c++){
+        if(c===gap || c===gap+1) continue;
+        grid[fr][c].t = T_BLOCKED; fenceTiles.add(fr+','+c);
+      }
+    }
+  } else if(arch==='orchard'){
+    for(let r=2;r<rows-2;r+=3) for(let c=2;c<cols-2;c+=3){
+      if(grid[r][c].t===T_GRASS){ grid[r][c].t=T_BLOCKED; trees.push({r,c}); }
+    }
+  } else if(arch==='pool'){
+    const pr0 = Math.floor(rows/2)-2, pc0 = Math.floor(cols/2)-3;
+    for(let r=pr0;r<pr0+4;r++) for(let c=pc0;c<pc0+5;c++){
+      grid[r][c].t = T_BLOCKED; poolTiles.add(r+','+c);
+    }
+  }
+  // paved walkway (open/postage yards only)
+  if((arch==='open'||arch==='postage') && Math.random()<0.55){
+    if(Math.random()<0.5){ const wc = randi(2,cols-3);
+      for(let r=0;r<rows;r++) grid[r][wc].t = T_PAVED;
+    } else { const wr = randi(3,rows-4);
+      for(let c=0;c<cols;c++) grid[wr][c].t = T_PAVED;
+    }
+  }
+  // random trees (not in orchards/mazes/pools, they have enough going on)
+  if(arch==='open'||arch==='corner'){
+    for(let i=0;i<randi(0,2);i++){
+      const r=randi(2,rows-3), c=randi(1,cols-2);
+      if(grid[r][c].t===T_GRASS){ grid[r][c].t=T_BLOCKED; trees.push({r,c}); }
+    }
+    // garden shed (30%): 2x2 block near a corner
+    if(Math.random()<0.3){
+      const r0 = Math.random()<0.5 ? 1 : rows-3;
+      const c0 = Math.random()<0.5 ? 0 : cols-2;
+      let ok = true;
+      for(let r=r0;r<r0+2;r++) for(let c=c0;c<c0+2;c++) if(grid[r][c].t!==T_GRASS) ok=false;
+      if(ok){ shed = {r:r0,c:c0};
+        for(let r=r0;r<r0+2;r++) for(let c=c0;c<c0+2;c++) grid[r][c].t=T_BLOCKED;
+      }
+    }
+  }
+  // flower bed: strip along top or bottom edge (only once yards get fancier)
+  if(job.obstacleCounts.flowers){
+    const bedRow = Math.random()<0.5 ? 0 : rows-1;
+    const bedLen = randi(4,7), bedStart = randi(0,cols-bedLen);
+    for(let c=bedStart;c<bedStart+bedLen;c++)
+      if(grid[bedRow][c].t===T_GRASS) grid[bedRow][c].t = T_FLOWER;
+  }
+
+  // spawn: nearest open grass tile to yard center
+  let spawn = null;
+  outer:
+  for(let rad=0;rad<rows;rad++){
+    for(let r=Math.floor(rows/2)-rad;r<=Math.floor(rows/2)+rad;r++)
+      for(let c=Math.floor(cols/2)-rad;c<=Math.floor(cols/2)+rad;c++)
+        if(r>=0&&c>=0&&r<rows&&c<cols&&grid[r][c].t===T_GRASS){ spawn={r,c}; break outer; }
+  }
+  if(!spawn) spawn = {r:Math.floor(rows/2), c:Math.floor(cols/2)};
+
+  const obstacles = [];   // Obstacle: {type,r,c,alive,revealed,...}
+  const taken = new Set([spawn.r+','+spawn.c]); // spawn tile kept clear
+  function freeTile(){
+    for(let i=0;i<200;i++){
+      const r=randi(1,job.rows-1), c=randi(0,cols-1);
+      const k=r+','+c;
+      if(grid[r][c].t===T_GRASS && !taken.has(k)){ taken.add(k); return {r,c}; }
+    }
+    return null;
+  }
+  const oc = job.obstacleCounts;
+  for(const type of ['rock','poop','branch','bigbranch','toy','sprinkler','anthill']){
+    for(let i=0;i<(oc[type]||0);i++){
+      const p = freeTile(); if(!p) break;
+      obstacles.push({type, r:p.r, c:p.c, alive:true, revealed:type!=='rock'});
+    }
+  }
+  // hidden easter egg in ~40% of yards, revealed by mowing its tile
+  if(Math.random()<0.4){
+    const p = freeTile();
+    if(p) obstacles.push({type:'egg', r:p.r, c:p.c, alive:true, revealed:false, item:pick(EGGS)});
+  }
+  // special request setups
+  if(job.special==='hiddenToys'){
+    for(let i=0;i<5;i++){
+      const p = freeTile(); if(!p) break;
+      obstacles.push({type:'toy', r:p.r, c:p.c, alive:true, revealed:true, special:true});
+    }
+  }
+  if(job.special==='glow'){
+    // a 2x2 patch of grass you are contractually forbidden to mow
+    for(let tries=0;tries<80;tries++){
+      const r=randi(1,rows-3), c=randi(0,cols-2);
+      const four = [[r,c],[r,c+1],[r+1,c],[r+1,c+1]];
+      if(four.every(([rr,cc])=>grid[rr][cc].t===T_GRASS && !taken.has(rr+','+cc))){
+        four.forEach(([rr,cc])=>{ grid[rr][cc].glow=true; taken.add(rr+','+cc); });
+        break;
+      }
+    }
+  }
+  // hose: horizontal run in lower half
+  const hoseTiles = new Set();
+  if(oc.hose){
+    const hr = randi(Math.floor(rows*0.55), rows-2);
+    const len = randi(5, cols-2), start = randi(0, cols-len);
+    for(let c=start;c<start+len;c++) hoseTiles.add(hr+','+c);
+  }
+  return {grid, obstacles, hoseTiles, trees, shed, spawn, fenceTiles, poolTiles};
+}
+
+function startJob(job){
+  const yard = buildYard(job);
+  // glow tiles are excluded: you are not supposed to mow them, so 100% stays reachable
+  const totalGrass = yard.grid.flat().filter(t=>t.t===T_GRASS && !t.glow).length;
+  G = {
+    job, ...yard,
+    mower:{ x:(yard.spawn.c+0.5)*TILE, y:(yard.spawn.r+0.5)*TILE, dir:0, jamUntil:0 },
+    joy:{active:false, bx:0, by:0, dx:0, dy:0},
+    keys:{},
+    timeLeft: job.timeLimit,
+    cutCount:0, totalGrass,
+    combo:0, bestCombo:0,
+    smearLeft:0,
+    damages:[],          // {label, cost}
+    pickups:[],          // {label, bonus}
+    lastHoseJam:0, lastBumpJam:0,
+    particles:[], shake:0,
+    nextSpray: 8,
+    weather: job.weather, antsUntil:0, nextRainWet:0,
+    stripeV:0, stripeH:0, glowPenalized:false,
+    dog: job.special==='dogLoose'
+      ? {x:TILE, y:TILE, tx:TILE, ty:TILE, nextThink:0, lastBump:0} : null,
+    movers:[],
+    nextBall: (!job.tutorial && (job.obstacleCounts.toy||0)>0 && Math.random()<0.5) ? 10 : Infinity,
+    nextSquirrel: (!job.tutorial && job.level>=3 && Math.random()<0.4) ? 15 : Infinity,
+    tutStep: job.tutorial ? 0 : -1,
+    over:false
+  };
+  if(job.special==='dogLoose') toast('🐕 Barnaby has been deployed.', 2000);
+  $('tutHint').style.display = job.tutorial ? 'block' : 'none';
+  if(job.tutorial) $('tutHint').textContent = '🕹️ Drag anywhere on the grass (or WASD) to mow';
+  startMusic();
+  if(job.weather==='rain') toast('🌧️ Light rain. Wet grass is slow grass.', 2200);
+  if(job.weather==='heat') toast(has('waterBottle')?'🥵 Heat wave. Good thing you brought water.':'🥵 Heat wave. Pace yourself.', 2200);
+  if(document.activeElement) document.activeElement.blur();   // so Enter/Space can't re-click a menu button mid-game
+  window.G = G;   // debug/testing handle
+  cvs.width = job.cols*TILE; cvs.height = job.rows*TILE;
+  ctx.imageSmoothingEnabled = false;
+  show('play');
+  updateHud();
+  lastT = performance.now();
+  cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(tick);
+}
+
+// ---------- audio + haptics ----------
+let AC = null;
+function beep(freq, dur=0.06, type='square', vol=0.05){
+  if(!P.settings.sfx) return;
+  try{
+    if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type=type; o.frequency.value=freq; g.gain.value=vol;
+    g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime+dur);
+    o.connect(g).connect(AC.destination); o.start(); o.stop(AC.currentTime+dur);
+  }catch(e){}
+}
+let lastCutBeep = 0;
+function buzz(ms){ if(navigator.vibrate) navigator.vibrate(ms); }
+
+// ---------- lo-fi mowing music (plays during jobs once you own the CD Player) ----------
+let musicTimer = null, musicStep = 0;
+const MUSIC_CHORDS = [           // gentle I-vi-IV-V, A major-ish
+  [220.00, 277.18, 329.63],
+  [174.61, 220.00, 261.63],
+  [196.00, 246.94, 293.66],
+  [164.81, 207.65, 246.94]
+];
+function musicNote(freq, dur, vol){
+  try{
+    if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'triangle'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, AC.currentTime);
+    g.gain.linearRampToValueAtTime(vol, AC.currentTime+0.04);
+    g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime+dur);
+    o.connect(g).connect(AC.destination); o.start(); o.stop(AC.currentTime+dur+0.05);
+  }catch(e){}
+}
+function startMusic(){
+  if(musicTimer || !P.settings.music || !has('cdPlayer')) return;
+  musicStep = 0;
+  musicTimer = setInterval(()=>{
+    const chord = MUSIC_CHORDS[Math.floor(musicStep/8)%4];
+    if(musicStep%8===0) musicNote(chord[0]/2, 1.6, 0.045);       // bass
+    musicNote(chord[musicStep%3], 0.5, 0.02);                    // lazy arpeggio
+    if(musicStep%4===2) musicNote(chord[2]*2, 0.25, 0.008);      // sparkle
+    musicStep++;
+  }, 300);
+}
+function stopMusic(){ if(musicTimer){ clearInterval(musicTimer); musicTimer = null; } }
+
+function toast(msg, ms=1400){
+  const t = $('toast'); t.textContent = msg; t.style.opacity = 1;
+  clearTimeout(t._h); t._h = setTimeout(()=>t.style.opacity=0, ms);
+}
+
+// ---------- input ----------
+window.addEventListener('keydown', e=>{ if(G) G.keys[e.key]=true; });
+window.addEventListener('keyup',   e=>{ if(G) G.keys[e.key]=false; });
+function canvasPos(e){
+  const r = cvs.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return { x:(t.clientX-r.left)/r.width*cvs.width, y:(t.clientY-r.top)/r.height*cvs.height };
+}
+function joyStart(e){ if(!G||G.over) return; e.preventDefault();
+  const p = canvasPos(e); G.joy.active=true; G.joy.bx=p.x; G.joy.by=p.y; G.joy.dx=0; G.joy.dy=0;
+  if(!AC) beep(1,0.01);   // unlock audio on first touch
+}
+function joyMove(e){ if(!G||!G.joy.active) return; e.preventDefault();
+  const p = canvasPos(e);
+  let dx=p.x-G.joy.bx, dy=p.y-G.joy.by;
+  const len = Math.hypot(dx,dy), max=TILE*1.6;
+  if(len>max){ dx=dx/len*max; dy=dy/len*max; }
+  G.joy.dx=dx/max; G.joy.dy=dy/max;
+}
+function joyEnd(e){ if(!G) return; G.joy.active=false; G.joy.dx=0; G.joy.dy=0; }
+cvs.addEventListener('touchstart',joyStart,{passive:false});
+cvs.addEventListener('touchmove',joyMove,{passive:false});
+cvs.addEventListener('touchend',joyEnd);
+cvs.addEventListener('mousedown',joyStart);
+window.addEventListener('mousemove',joyMove);
+window.addEventListener('mouseup',joyEnd);
+
+// ---------- helpers ----------
+function tileAt(x,y){ const c=Math.floor(x/TILE), r=Math.floor(y/TILE);
+  if(r<0||c<0||r>=G.job.rows||c>=G.job.cols) return null; return {r,c}; }
+function obstacleAt(r,c){ return G.obstacles.find(o=>o.alive && o.r===r && o.c===c); }
+function isSolid(r,c){
+  if(r<0||c<0||r>=G.job.rows||c>=G.job.cols) return true;
+  if(G.grid[r][c].t===T_BLOCKED) return true;
+  const o = obstacleAt(r,c);
+  return o && (o.type==='bigbranch'||o.type==='toy');
+}
+function addDamage(label,cost){ G.damages.push({label,cost}); G.combo=0; G.shake=6; updateHud(); }
+
+// ---------- tick ----------
+function tick(now){
+  if(!G) return;
+  const dt = Math.min(0.05,(now-lastT)/1000); lastT = now;
+  if(!G.over){
+    update(dt, now/1000);
+    render(now/1000);
+  }
+  rafId = requestAnimationFrame(tick);
+}
+
+function update(dt, now){
+  const m = G.mower, k = G.keys;
+  // input vector
+  let ix = G.joy.dx, iy = G.joy.dy;
+  if(k['ArrowLeft']||k['a']) ix=-1; if(k['ArrowRight']||k['d']) ix=1;
+  if(k['ArrowUp']||k['w']) iy=-1;   if(k['ArrowDown']||k['s']) iy=1;
+  const mag = Math.min(1, Math.hypot(ix,iy));
+  if(mag>0.15) m.dir = Math.atan2(iy,ix);
+
+  // speed
+  let speed = TILE*3.1 * (has('wheels')?1.25:1) * (has('shoes')?1.1:1) * (has('ridingMower')?1.5:1);
+  const ct = tileAt(m.x,m.y);
+  if(ct && G.grid[ct.r][ct.c].wetUntil > now) speed *= 0.55;
+  if(G.weather==='heat' && !has('waterBottle')){
+    const fatigue = 1 - G.timeLeft/G.job.timeLimit;   // tire out as the job drags on
+    speed *= 1 - 0.25*fatigue;
+  }
+  if(now < G.antsUntil){
+    speed *= 0.7;   // ants in your socks
+    for(let i=0;i<2;i++) G.particles.push({x:m.x+rand(-12,12), y:m.y+rand(-12,12),
+      vx:rand(-50,50), vy:rand(-50,50), life:0.3, color:'#3e2723'});
+  }
+  if(now*1000 < m.jamUntil) speed = 0;
+
+  // move with axis-separated collision (slides along solids)
+  const half = TILE*0.32;
+  if(mag>0.15 && speed>0){
+    const nx = m.x + Math.cos(m.dir)*speed*mag*dt;
+    const ny = m.y + Math.sin(m.dir)*speed*mag*dt;
+    const tx = tileAt(nx,m.y), ty = tileAt(m.x,ny);
+    if(tx && !isSolid(tx.r,tx.c)) m.x = Math.max(half, Math.min(cvs.width-half, nx));
+    else bump(now);
+    if(ty && !isSolid(ty.r,ty.c)) m.y = Math.max(half, Math.min(cvs.height-half, ny));
+    else bump(now);
+  }
+
+  // cut current tile (+ neighbors with wide deck)
+  const cells = [tileAt(m.x,m.y)];
+  if(has('wideDeck')||has('ridingMower')){
+    cells.push(tileAt(m.x-TILE*0.7,m.y), tileAt(m.x+TILE*0.7,m.y),
+               tileAt(m.x,m.y-TILE*0.7), tileAt(m.x,m.y+TILE*0.7));
+  }
+  for(const cell of cells){ if(cell) cutTile(cell.r, cell.c, now); }
+
+  // hose jam
+  if(ct && G.hoseTiles.has(ct.r+','+ct.c) && now-G.lastHoseJam>2.5 && mag>0.15){
+    G.lastHoseJam = now; m.jamUntil = now*1000+900;
+    toast('🐍 Hose tangled in the blades!'); beep(120,0.25,'sawtooth',0.08); buzz(80);
+    G.combo = 0; updateHud();
+  }
+
+  // Barnaby: chases the mower, bumps you, cannot be reasoned with
+  if(G.dog){
+    const d = G.dog;
+    if(now > d.nextThink){ d.nextThink = now+1.3; d.tx = m.x+rand(-50,50); d.ty = m.y+rand(-50,50); }
+    const ddx = d.tx-d.x, ddy = d.ty-d.y, dl = Math.hypot(ddx,ddy);
+    if(dl>4){ d.x += ddx/dl*80*dt; d.y += ddy/dl*80*dt; }
+    d.x = Math.max(10, Math.min(cvs.width-10, d.x));
+    d.y = Math.max(10, Math.min(cvs.height-10, d.y));
+    if(Math.hypot(d.x-m.x, d.y-m.y) < TILE*0.7 && now-d.lastBump > 4){
+      d.lastBump = now; m.jamUntil = now*1000+700; G.combo = 0; updateHud();
+      toast('🐕 Barnaby says hi. Aggressively.'); beep(330,0.1); beep(392,0.12); buzz(40);
+    }
+  }
+
+  // moving hazards: stray balls and an armed squirrel
+  if(now > G.nextBall){
+    G.nextBall = now + rand(14,22);
+    const fromLeft = Math.random()<0.5, row = randi(1, G.job.rows-2);
+    G.movers.push({kind:'ball', x: fromLeft?-12:cvs.width+12, y:(row+0.5)*TILE,
+      vx: fromLeft?95:-95, hit:false});
+  }
+  if(now > G.nextSquirrel){
+    G.nextSquirrel = now + rand(20,32);
+    const fromLeft = Math.random()<0.5, row = randi(1, G.job.rows-2);
+    G.movers.push({kind:'squirrel', x: fromLeft?-12:cvs.width+12, y:(row+0.5)*TILE,
+      vx: fromLeft?120:-120, dropX: rand(cvs.width*0.3, cvs.width*0.7), dropped:false});
+  }
+  for(const mv of G.movers){
+    mv.x += mv.vx*dt;
+    if(mv.kind==='ball' && !mv.hit && Math.hypot(mv.x-m.x, mv.y-m.y) < TILE*0.6){
+      mv.hit = true; G.combo = 0; updateHud();
+      toast('🏀 Right in the mower. Incredible.'); beep(200,0.12,'square',0.06); buzz(40);
+    }
+    if(mv.kind==='squirrel' && !mv.dropped &&
+       ((mv.vx>0 && mv.x>=mv.dropX) || (mv.vx<0 && mv.x<=mv.dropX))){
+      mv.dropped = true;
+      const tl = tileAt(mv.x, mv.y);
+      if(tl && G.grid[tl.r][tl.c].t===T_GRASS && !obstacleAt(tl.r,tl.c)){
+        G.obstacles.push({type:'branch', r:tl.r, c:tl.c, alive:true, revealed:true});
+        toast('🐿️ The squirrel dropped a branch. On purpose.');
+      }
+    }
+  }
+  G.movers = G.movers.filter(mv => mv.x > -30 && mv.x < cvs.width+30);
+
+  // tutorial hints advance as the player does the thing
+  if(G.tutStep >= 0){
+    const cutPct = G.cutCount/G.totalGrass;
+    const poopAlive = G.obstacles.some(o=>o.type==='poop' && o.alive);
+    if(G.tutStep===0 && G.cutCount>=6){ G.tutStep=1;
+      $('tutHint').textContent = '💩 Do NOT mow that. Get close and hit PICK UP (E)'; }
+    else if(G.tutStep===1 && !poopAlive){ G.tutStep=2;
+      $('tutHint').textContent = '🪨 Gray tips in tall grass are rocks. Steer around them'; }
+    else if(G.tutStep===2 && cutPct>=0.4){ G.tutStep=3;
+      $('tutHint').textContent = '✓ Cut what pays, skip what hurts. Hit DONE when it stops being worth it'; }
+  }
+
+  // rain keeps re-wetting random patches
+  if(G.weather==='rain' && now > G.nextRainWet){
+    G.nextRainWet = now + 2.5;
+    for(let i=0;i<3;i++){
+      const r=randi(0,G.job.rows-1), c=randi(0,G.job.cols-1);
+      if(G.grid[r][c].t===T_GRASS||G.grid[r][c].t===T_CUT) G.grid[r][c].wetUntil = now+8;
+    }
+  }
+
+  // sprinkler spray cycle
+  if(now > G.nextSpray){
+    G.nextSpray = now + 16;
+    let sprayed = false;
+    for(const o of G.obstacles){
+      if(o.type!=='sprinkler'||!o.alive) continue;
+      sprayed = true;
+      for(let r=o.r-1;r<=o.r+1;r++) for(let c=o.c-1;c<=o.c+1;c++){
+        if(r>=0&&c>=0&&r<G.job.rows&&c<G.job.cols) G.grid[r][c].wetUntil = now+9;
+      }
+      for(let i=0;i<10;i++) G.particles.push({x:o.c*TILE+TILE/2,y:o.r*TILE+TILE/2,
+        vx:rand(-40,40),vy:rand(-70,-20),life:0.7,color:'#7ec8ff'});
+    }
+    if(sprayed){ toast('💦 Sprinklers on! Wet grass is slow grass.'); beep(700,0.15,'sine',0.04); }
+  }
+
+  // particles
+  for(const p of G.particles){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=160*dt; p.life-=dt; }
+  G.particles = G.particles.filter(p=>p.life>0);
+  if(G.shake>0) G.shake = Math.max(0, G.shake-dt*24);
+
+  // pickup button
+  const near = nearestPickup();
+  const pb = $('pickupBtn');
+  if(near){ pb.disabled=false; pb.textContent = 'PICK UP '+OBSTACLE_DEFS[near.type].icon+KEY_HINT; }
+  else { pb.disabled=true; pb.textContent='PICK UP'+KEY_HINT; }
+
+  // timer
+  G.timeLeft -= dt;
+  $('hudTime').textContent = Math.max(0,Math.ceil(G.timeLeft));
+  if(G.timeLeft<=0) endJob(false);
+}
+
+function bump(now){
+  const m = G.mower;
+  // hitting a solid obstacle: brief jam + tiny cost, throttled
+  if(now - G.lastBumpJam > 2){
+    G.lastBumpJam = now;
+    const ahead = tileAt(m.x+Math.cos(m.dir)*TILE*0.8, m.y+Math.sin(m.dir)*TILE*0.8);
+    const o = ahead && obstacleAt(ahead.r, ahead.c);
+    if(o && o.type==='bigbranch'){
+      m.jamUntil = now*1000+1200;
+      addDamage('Mower jam (big branch)', OBSTACLE_DEFS.bigbranch.damageCost);
+      toast('🪵 JAM! Pick that thing up!'); beep(90,0.3,'sawtooth',0.09); buzz([60,40,60]);
+    }
+  }
+}
+
+function cutTile(r,c,now){
+  const t = G.grid[r][c];
+  if(t.t===T_FLOWER){
+    t.t = T_TRAMPLED;
+    addDamage('Flattened flowers', OBSTACLE_DEFS.flowers.damageCost);
+    toast('🌷 You mowed the flowers. They had names.'); beep(180,0.2,'sawtooth',0.08); buzz(60);
+    return;
+  }
+  if(t.t!==T_GRASS) return;
+  // obstacles hiding in / sitting on this tile
+  const o = obstacleAt(r,c);
+  if(o){
+    if(o.type==='bigbranch'||o.type==='toy') return; // solid, handled by collision
+    if(o.type==='rock'){
+      o.revealed = true; o.alive=false;
+      if(has('rockGuard')){ toast('🪨 CLUNK. Rock guard earned its keep.'); beep(200,0.1); }
+      else { addDamage('Blade damage (rock)', OBSTACLE_DEFS.rock.damageCost);
+        toast('🪨 CLUNK! Blade damage.'); beep(90,0.25,'sawtooth',0.1); buzz(90); }
+    } else if(o.type==='branch'){
+      o.alive=false;
+      if(has('mulcher')){ G.pickups.push({label:'Mulched a branch', bonus:1});
+        toast('🌿 Mulched. +$1'); beep(500,0.06); }
+      else if(has('sharpBlade')){ toast('🌿 Chewed right through it. Sharp blade!'); beep(500,0.06); }
+      else { addDamage('Dull blade (branch)', OBSTACLE_DEFS.branch.damageCost);
+        toast('🌿 Branch dulled your blade.'); beep(150,0.15,'sawtooth',0.07); buzz(50); }
+    } else if(o.type==='anthill'){
+      o.alive=false; G.antsUntil = now + 6;
+      toast('🐜 ANTS. THEY ARE IN YOUR SOCKS.'); beep(240,0.15,'sawtooth',0.06); buzz([30,30,30,30,30]);
+    } else if(o.type==='egg'){
+      o.alive=false;
+      G.pickups.push({label:'Found: '+o.item.name+' '+o.item.icon, bonus:5});
+      if(!P.eggs.includes(o.item.id)) P.eggs.push(o.item.id);
+      toast('✨ '+o.item.name+'! +$5'); beep(1046,0.1); beep(1318,0.12); buzz(30);
+      for(let i=0;i<12;i++) G.particles.push({x:c*TILE+TILE/2, y:r*TILE+TILE/2,
+        vx:rand(-70,70), vy:rand(-90,-20), life:0.8, color:'#ffcd75'});
+    } else if(o.type==='poop'){
+      o.alive=false; G.smearLeft = 4; t.smear = true;
+      addDamage('Dog poop trail', OBSTACLE_DEFS.poop.damageCost);
+      toast('💩 Oh no. OH NO.'); beep(70,0.3,'sawtooth',0.1); buzz([50,50,120]);
+    } else if(o.type==='sprinkler'){
+      o.alive=false;
+      addDamage('Broken sprinkler', OBSTACLE_DEFS.sprinkler.damageCost);
+      toast('💦 CRACK. That sprinkler was $18.'); beep(100,0.3,'sawtooth',0.1); buzz(120);
+    }
+  }
+  t.t = T_CUT;
+  if(t.glow){
+    if(!G.glowPenalized){ G.glowPenalized = true;
+      addDamage('Mowed the glowing patch', 20);
+      toast('🌟 The ground hums. Somewhere, a phone rings.'); beep(66,0.4,'sawtooth',0.1); buzz(200);
+    }
+    return;   // forbidden grass never counts toward the cut
+  }
+  if(G.smearLeft>0 && !t.smear){ t.smear=true; G.smearLeft--; }
+  G.cutCount++;
+  const movingV = Math.abs(Math.sin(G.mower.dir))>0.7;
+  t.cutDir = movingV ? 'v' : 'h';   // stripe banding follows how you mowed this tile
+  if(movingV) G.stripeV++; else G.stripeH++;
+  G.combo++; G.bestCombo = Math.max(G.bestCombo, G.combo);
+  // clippings
+  for(let i=0;i<3;i++) G.particles.push({x:c*TILE+rand(4,TILE-4), y:r*TILE+rand(4,TILE-4),
+    vx:rand(-30,30), vy:rand(-60,-10), life:0.5, color: t.smear?'#8d6e63':'#9ccc65'});
+  if(now - lastCutBeep > 0.09){ lastCutBeep = now; beep(660+G.combo*4, 0.03, 'square', 0.025); buzz(4); }
+  updateHud();
+}
+
+function nearestPickup(){
+  const m = G.mower; let best=null, bd=TILE*(has('toolBelt')?2.6:1.4);
+  for(const o of G.obstacles){
+    if(!o.alive || !OBSTACLE_DEFS[o.type].canPickup) continue;
+    const d = Math.hypot(o.c*TILE+TILE/2-m.x, o.r*TILE+TILE/2-m.y);
+    if(d<bd){ bd=d; best=o; }
+  }
+  return best;
+}
+$('pickupBtn').addEventListener('click', ()=>{
+  if(!G||G.over) return;
+  const o = nearestPickup(); if(!o) return;
+  o.alive = false;
+  const def = OBSTACLE_DEFS[o.type];
+  G.pickups.push({label:'Picked up '+(def.single||def.label), bonus:def.pickupBonus});
+  toast(def.icon+' +$'+def.pickupBonus+' cleanup'); beep(880,0.08,'square',0.05); beep(1100,0.08,'square',0.04); buzz(20);
+});
+// pickup hotkeys: E sits next to WASD, Enter sits next to the arrows, Space for habit
+const PICKUP_KEYS = [' ', 'e', 'E', 'Enter'];
+window.addEventListener('keydown', e=>{
+  if(!G || G.over || e.repeat) return;
+  if(PICKUP_KEYS.includes(e.key)){ e.preventDefault(); $('pickupBtn').click(); }
+});
+
+// menu hotkeys: every screen is playable without the mouse
+function activeScreenName(){ return document.querySelector('.screen.active').id.replace('screen-',''); }
+window.addEventListener('keydown', e=>{
+  if(e.repeat) return;
+  const s = activeScreenName(), k = e.key.toLowerCase();
+  if((e.target.tagName||'')==='INPUT'){          // typing your name: only Enter acts
+    if(e.key==='Enter' && s==='setup'){ e.preventDefault(); $('setupGoBtn').click(); }
+    return;
+  }
+  if(s==='setup'){
+    if(e.key==='Enter') $('setupGoBtn').click();
+  } else if(s==='home'){
+    if(['1','2','3','4'].includes(e.key)){ const c=document.querySelectorAll('.jobcard')[+e.key-1]; if(c) c.click(); }
+    else if(k==='g') $('shopBtn').click();
+  } else if(s==='brief'){
+    if(e.key==='Enter') $('startJobBtn').click();
+    else if(e.key==='Escape'||k==='b') $('briefBackBtn').click();
+  } else if(s==='play'){
+    if(k==='f' && G && !G.over) $('finishBtn').click();
+  } else if(s==='results'){
+    if(e.key==='Enter'||k==='n') $('resHomeBtn').click();
+    else if(k==='g') $('resShopBtn').click();
+  } else if(s==='shop'){
+    if(e.key==='Escape'||k==='b') $('shopBackBtn').click();
+    else if(['1','2','3','4'].includes(e.key)) showTab(['gear','ads','skins','eggs'][+e.key-1]);
+  } else if(s==='win'){
+    if(e.key==='Enter') $('winHomeBtn').click();
+  }
+});
+
+// desktop-only key hints on buttons
+if(!IS_TOUCH){
+  $('finishBtn').textContent = 'DONE ✓ (F)';
+  $('startJobBtn').textContent = 'START MOWING (ENTER)';
+  $('briefBackBtn').textContent = 'Back (ESC)';
+  $('resHomeBtn').textContent = 'NEXT JOB (ENTER)';
+  $('resShopBtn').textContent = 'SHOP (G)';
+  $('shopBtn').textContent = '🛠️ GARAGE & SHOP (G)';
+  $('shopBackBtn').textContent = 'Back to jobs (ESC)';
+}
+
+function updateHud(){
+  if(!G) return;
+  const cutPct = G.cutCount/G.totalGrass;
+  $('hudCut').textContent = Math.round(cutPct*100)+'%';
+  $('hudCombo').textContent = G.combo;
+  // live net-profit estimate: base + cut bonus + pickups so far - damages so far
+  const cutBonus = Math.round(cutPct*12*(G.job.payMult||1)*(has('clipBag')?1.5:1));
+  const pickupSum = G.pickups.reduce((s,p)=>s+p.bonus,0);
+  const dmgSum = G.damages.reduce((s,d)=>s+d.cost,0);
+  const net = G.job.basePay + cutBonus + pickupSum - dmgSum;
+  const el = $('hudNet');
+  el.textContent = (net<0?'-$':'$')+Math.abs(net);
+  el.classList.toggle('neg', net<0);
+}
+
+// ---------- render ----------
+function render(now){
+  const shx = G.shake>0 ? rand(-G.shake,G.shake) : 0;
+  const shy = G.shake>0 ? rand(-G.shake,G.shake) : 0;
+  ctx.save(); ctx.translate(shx,shy);
+  const skin = COSMETICS.find(c=>c.id===P.equippedSkin) || COSMETICS[0];
+
+  for(let r=0;r<G.job.rows;r++) for(let c=0;c<G.job.cols;c++){
+    const t = G.grid[r][c], x=c*TILE, y=r*TILE;
+    if(t.t===T_GRASS){
+      ctx.fillStyle = (t.seed%2)?'#2e7d32':'#2b7530'; ctx.fillRect(x,y,TILE,TILE);
+      ctx.fillStyle = '#255f28';   // tall grass tufts
+      for(let i=0;i<4;i++){ const gx=x+((t.seed*7+i*13)%(TILE-6))+3, gy=y+((t.seed*11+i*19)%(TILE-8))+4;
+        ctx.fillRect(gx,gy,2,5); }
+    } else if(t.t===T_CUT){
+      // lawn stripes: alternating light/dark bands run the way you mowed
+      const band = (t.cutDir==='v') ? (c%2) : (r%2);
+      ctx.fillStyle = band ? '#7cc95a' : '#4e9c3e'; ctx.fillRect(x,y,TILE,TILE);
+      // faint mowed grain lines in the direction of travel
+      ctx.fillStyle = band ? '#8fd66a' : '#5aad48';
+      if(t.cutDir==='v'){ ctx.fillRect(x+7,y,2,TILE); ctx.fillRect(x+18,y,2,TILE); ctx.fillRect(x+26,y,2,TILE); }
+      else { ctx.fillRect(x,y+7,TILE,2); ctx.fillRect(x,y+18,TILE,2); ctx.fillRect(x,y+26,TILE,2); }
+      if(t.smear){ ctx.fillStyle='#795548aa'; ctx.fillRect(x+4,y+10,TILE-8,5); ctx.fillRect(x+8,y+20,TILE-14,4); }
+    } else if(t.t===T_FLOWER){
+      ctx.fillStyle = '#3d8b40'; ctx.fillRect(x,y,TILE,TILE);
+      ctx.fillStyle = '#f06292'; ctx.fillRect(x+6,y+6,5,5); ctx.fillRect(x+20,y+16,5,5);
+      ctx.fillStyle = '#ffee58'; ctx.fillRect(x+14,y+22,4,4); ctx.fillRect(x+22,y+5,4,4);
+    } else if(t.t===T_TRAMPLED){
+      ctx.fillStyle = '#6d4c41'; ctx.fillRect(x,y,TILE,TILE);
+      ctx.fillStyle = '#8d6e63'; ctx.fillRect(x+8,y+8,6,3); ctx.fillRect(x+18,y+18,7,3);
+    } else if(t.t===T_PAVED){
+      ctx.fillStyle = (t.seed%2)?'#9aa0a6':'#93999f'; ctx.fillRect(x,y,TILE,TILE);
+      ctx.fillStyle = '#7d838a'; ctx.fillRect(x,y,TILE,2); ctx.fillRect(x,y,2,TILE);
+      if(t.seed%3===0){ ctx.fillRect(x+10,y+14,8,2); }
+    } else if(t.t===T_BLOCKED){
+      const key = r+','+c;
+      if(G.poolTiles.has(key)){
+        ctx.fillStyle = '#4fc3f7'; ctx.fillRect(x,y,TILE,TILE);
+        ctx.fillStyle = '#81d4fa';
+        const w = Math.floor(now*2+r+c)%3;
+        ctx.fillRect(x+4, y+8+w*3, 12, 2); ctx.fillRect(x+16, y+20-w*2, 10, 2);
+      } else if(G.fenceTiles.has(key)){
+        ctx.fillStyle = (t.seed%2)?'#2e7d32':'#2b7530'; ctx.fillRect(x,y,TILE,TILE);
+        ctx.fillStyle = '#8d6e63'; ctx.fillRect(x,y+13,TILE,5);
+        ctx.fillStyle = '#6d4c41'; ctx.fillRect(x+4,y+6,5,19); ctx.fillRect(x+22,y+6,5,19);
+      } else {
+        ctx.fillStyle = '#5d4037'; ctx.fillRect(x,y,TILE,TILE);
+        ctx.fillStyle = '#4e342e'; ctx.fillRect(x+6,y+8,5,3); ctx.fillRect(x+18,y+20,6,3);
+      }
+    }
+    if(t.glow && t.t===T_GRASS){
+      ctx.fillStyle = `rgba(255,255,120,${0.16+0.12*Math.sin(now*5+r+c)})`;
+      ctx.fillRect(x,y,TILE,TILE);
+      ctx.fillStyle = '#fff59d'; ctx.fillRect(x+14,y+6,3,3); ctx.fillRect(x+7,y+21,3,3);
+    }
+    if(t.wetUntil>now){ ctx.fillStyle='#42a5f533'; ctx.fillRect(x,y,TILE,TILE); }
+  }
+  // hose
+  ctx.strokeStyle = '#2e7d5b'; ctx.lineWidth = 6; ctx.lineCap='round';
+  let hosePts = [...G.hoseTiles].map(k=>k.split(',').map(Number));
+  if(hosePts.length){
+    hosePts.sort((a,b)=>a[1]-b[1]);
+    ctx.beginPath();
+    hosePts.forEach(([r,c],i)=>{ const px=c*TILE+TILE/2, py=r*TILE+TILE/2+Math.sin(c*2)*4;
+      i?ctx.lineTo(px,py):ctx.moveTo(px,py); });
+    ctx.stroke();
+    ctx.strokeStyle='#4caf7d'; ctx.lineWidth=2; ctx.stroke();
+  }
+  // obstacles
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='20px serif';
+  for(const o of G.obstacles){
+    if(!o.alive && o.type!=='rock') continue;
+    if(o.type==='egg') continue;   // hidden until mowed
+    if(o.type==='anthill'){
+      const ax=o.c*TILE, ay=o.r*TILE;
+      ctx.fillStyle='#8d6e63'; ctx.beginPath(); ctx.arc(ax+TILE/2,ay+TILE/2+4,8,Math.PI,0); ctx.fill();
+      ctx.fillStyle='#5d4037'; ctx.fillRect(ax+TILE/2-2,ay+TILE/2-1,4,3);
+      ctx.fillStyle='#3e2723';
+      ctx.fillRect(ax+8,ay+24,2,2); ctx.fillRect(ax+22,ay+21,2,2); ctx.fillRect(ax+15,ay+26,2,2);
+      continue;
+    }
+    if(o.type==='rock'){
+      const rx=o.c*TILE, ry=o.r*TILE;
+      if(o.revealed){ ctx.font='14px serif'; ctx.fillText('🪨', rx+TILE/2, ry+TILE/2); ctx.font='20px serif'; }
+      else { // telegraph: gray tip peeking through the tall grass
+        ctx.fillStyle='#a7adb3'; ctx.fillRect(rx+12,ry+16,8,5);
+        ctx.fillStyle='#8b9196'; ctx.fillRect(rx+10,ry+19,4,3); ctx.fillRect(rx+19,ry+14,4,3);
+      }
+      continue;
+    }
+    ctx.fillText(OBSTACLE_DEFS[o.type].icon, o.c*TILE+TILE/2, o.r*TILE+TILE/2);
+  }
+  // particles
+  for(const p of G.particles){ ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,3,3); }
+
+  // mower + kid
+  const m = G.mower;
+  ctx.save(); ctx.translate(m.x,m.y); ctx.rotate(m.dir+Math.PI/2);
+  const jam = now*1000 < m.jamUntil;
+  if(jam) ctx.rotate(Math.sin(now*40)*0.08);
+  ctx.fillStyle = skin.colors.body; ctx.fillRect(-9,-12,18,16);       // deck
+  ctx.fillStyle = skin.colors.accent; ctx.fillRect(-9,-12,18,4);
+  ctx.fillStyle = '#212121'; ctx.fillRect(-11,-4,4,7); ctx.fillRect(7,-4,4,7); // wheels
+  ctx.strokeStyle = '#455a64'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(-6,4); ctx.lineTo(-5,16); ctx.moveTo(6,4); ctx.lineTo(5,16); ctx.stroke(); // handle
+  ctx.fillStyle = '#ffb74d'; ctx.fillRect(-4,14,8,8);                  // kid head
+  if(P.playerGender==='girl'){
+    ctx.fillStyle = '#5d4037'; ctx.fillRect(-2,21,4,7);                // ponytail
+    ctx.fillStyle = '#ec407a'; ctx.fillRect(-4,12,8,4);                // pink cap
+  } else {
+    ctx.fillStyle = '#c62828'; ctx.fillRect(-4,12,8,4);                // red cap
+  }
+  ctx.restore();
+
+  // moving hazards
+  ctx.font='18px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const mv of G.movers){
+    ctx.fillText(mv.kind==='ball' ? '🏀' : '🐿️', mv.x, mv.y + Math.sin(now*12+mv.x)*2);
+  }
+
+  // Barnaby
+  if(G.dog){
+    ctx.font='22px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🐕', G.dog.x, G.dog.y + Math.sin(now*10)*2);
+  }
+
+  // shed (drawn over its blocked tiles)
+  if(G.shed){
+    const sx=G.shed.c*TILE, sy=G.shed.r*TILE;
+    ctx.fillStyle='#8d6e63'; ctx.fillRect(sx+3,sy+10,TILE*2-6,TILE*2-12);
+    ctx.fillStyle='#6d4c41'; ctx.fillRect(sx+3,sy+10,TILE*2-6,6);
+    ctx.fillStyle='#b71c1c'; ctx.fillRect(sx,sy,TILE*2,14);            // roof
+    ctx.fillStyle='#7f1414'; ctx.fillRect(sx,sy+10,TILE*2,4);
+    ctx.fillStyle='#4e342e'; ctx.fillRect(sx+TILE-7,sy+26,14,TILE*2-28); // door
+  }
+  // trees: trunk + canopy (canopy overlaps neighbors and the mower for depth)
+  for(const tr of G.trees){
+    const tx=tr.c*TILE+TILE/2, ty=tr.r*TILE+TILE/2;
+    ctx.fillStyle='#5d4037'; ctx.fillRect(tx-4,ty-4,8,12);
+    ctx.fillStyle='#1b5e20'; ctx.beginPath(); ctx.arc(tx,ty-10,TILE*0.75,0,7); ctx.fill();
+    ctx.fillStyle='#2e7d32'; ctx.beginPath(); ctx.arc(tx-6,ty-14,TILE*0.42,0,7); ctx.fill();
+    ctx.fillStyle='#388e3c'; ctx.beginPath(); ctx.arc(tx+8,ty-8,TILE*0.34,0,7); ctx.fill();
+  }
+
+  // weather overlays (kept subtle)
+  if(G.weather==='cloudy'){ ctx.fillStyle='#37474f18'; ctx.fillRect(0,0,cvs.width,cvs.height); }
+  if(G.weather==='heat'){ ctx.fillStyle='#ff980014'; ctx.fillRect(0,0,cvs.width,cvs.height); }
+  if(G.weather==='rain'){
+    ctx.fillStyle='#26418f14'; ctx.fillRect(0,0,cvs.width,cvs.height);
+    ctx.strokeStyle='#9fc5ff55'; ctx.lineWidth=1; ctx.beginPath();
+    for(let i=0;i<26;i++){
+      const rx=((i*97+Math.floor(now*260))% (cvs.width+40))-20;
+      const ry=(i*151+Math.floor(now*430))%cvs.height;
+      ctx.moveTo(rx,ry); ctx.lineTo(rx-2,ry+8);
+    }
+    ctx.stroke();
+  }
+
+  // floating joystick
+  if(G.joy.active){
+    ctx.fillStyle='#ffffff22'; ctx.beginPath(); ctx.arc(G.joy.bx,G.joy.by,TILE*1.3,0,7); ctx.fill();
+    ctx.fillStyle='#ffffff55'; ctx.beginPath();
+    ctx.arc(G.joy.bx+G.joy.dx*TILE, G.joy.by+G.joy.dy*TILE, TILE*0.5,0,7); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* =========================================================
+   RESULTS (ResultSummary)
+   ========================================================= */
+$('finishBtn').addEventListener('click', ()=>{ if(G&&!G.over) endJob(true); });
+
+function endJob(early){
+  G.over = true;
+  cancelAnimationFrame(rafId);
+  const job = G.job, cust = CUSTOMERS[job.customerType];
+  const cutPct = G.cutCount/G.totalGrass;
+  const lines = [];
+
+  const base = cutPct < 0.4 ? Math.round(job.basePay/2) : job.basePay;
+  lines.push({label: cutPct<0.4?'Base pay (docked, barely mowed)':'Base pay', amt: base});
+  lines.push({label:`Grass cut bonus (${Math.round(cutPct*100)}%)`,
+    amt: Math.round(cutPct*12*(job.payMult||1)*(has('clipBag')?1.5:1))});
+
+  // edges: every perimeter grass tile cut
+  let edgeDone = true;
+  for(let r=0;r<job.rows;r++) for(let c=0;c<job.cols;c++){
+    if(r===0||c===0||r===job.rows-1||c===job.cols-1){
+      if(G.grid[r][c].t===T_GRASS){ edgeDone=false; }
+    }
+  }
+  if(edgeDone) lines.push({label:'Edges trimmed', amt:6});
+
+  if(early && cutPct>=job.requiredCutPercent && G.timeLeft>=10){
+    const sp = Math.round((G.timeLeft>=25?5:3)*cust.speedBonusMult*(job.payMult||1));
+    lines.push({label:'Speed bonus', amt:sp});
+  }
+  for(const p of G.pickups) lines.push({label:p.label, amt:p.bonus});
+  const streakMin = has('cdPlayer')?20:30, streakPay = has('cdPlayer')?8:4;
+  if(G.bestCombo>=streakMin) lines.push({label:`Clean streak x${G.bestCombo}${has('cdPlayer')?' 🎵':''}`, amt:streakPay});
+  if(job.special==='stripes'){
+    const tot = G.stripeV + G.stripeH;
+    if(tot>10) lines.push(G.stripeV/tot>=0.7
+      ? {label:'Regulation stripes, HOA approved', amt:8}
+      : {label:'Non-regulation stripes', amt:-4});
+  }
+  if(job.special==='hiddenToys'){
+    const hidden = G.obstacles.filter(o=>o.special);
+    if(hidden.length && hidden.every(o=>!o.alive))
+      lines.push({label:'Found every hidden toy', amt:10});
+  }
+  for(const d of G.damages) lines.push({label:d.label, amt:-d.cost});
+  if(job.customerType==='retiree' && cutPct<job.requiredCutPercent)
+    lines.push({label:'Missed patches (photographed)', amt:-6});
+
+  // customer mood + tip
+  const dmgCount = G.damages.length;
+  const shortfall = Math.max(0, job.requiredCutPercent - cutPct)*100;
+  const mood = 100 - dmgCount*12 - shortfall*1.5 + (edgeDone?5:0);
+  let tier, face;
+  if(mood>=88){ tier='love'; face='🤩'; } else if(mood>=65){ tier='happy'; face='😊'; }
+  else if(mood>=40){ tier='meh'; face='😐'; } else { tier='mad'; face='😤'; }
+  const tipBase = {love:8, happy:5, meh:2, mad:0}[tier];
+  const tip = Math.round(tipBase*cust.tipMult);
+  if(tip>0) lines.push({label:'Customer tip', amt:tip});
+
+  let profit = lines.reduce((s,l)=>s+l.amt,0);
+  // broke floor: a bad day never leaves you under $10
+  if(P.cash + profit < 10){
+    const gift = 10 - (P.cash + profit);
+    lines.push({label:'Mom covered you. Do not tell Dad.', amt:gift});
+    profit += gift;
+  }
+  P.cash = Math.max(0, P.cash + profit);
+  P.jobsDone++;
+  stopMusic();
+  $('tutHint').style.display = 'none';
+  // share-card data
+  const eggLine = G.pickups.find(p=>p.label.startsWith('Found:'));
+  const worstHit = G.damages.length ? G.damages.reduce((a,b)=>a.cost>=b.cost?a:b) : null;
+  lastSummary = { jobName: job.name, face: cust.face, profit,
+    cutPct: Math.round(cutPct*100),
+    highlight: eggLine ? eggLine.label.replace('Found: ','Dug up: ')
+      : worstHit ? worstHit.label : 'Zero casualties. A clean job.' };
+  // goal reached: queue the win screen (fires once per save)
+  if(P.cash >= P.goal && !P.goalReached){ P.goalReached = true; pendingWin = true; }
+  saveGame();
+  // dry topper for the sim's funniest outcome
+  $('resTopper').style.display = profit < 0 ? 'block' : 'none';
+  // name the level-ups instead of unlocking silently
+  const notice = P.jobsDone===3 ? "Word's getting around. Tougher yards now, and new gear in the shed."
+    : P.jobsDone===6 ? "You're a real operation now. The weird jobs found you." : null;
+  $('resNotice').style.display = notice ? 'block' : 'none';
+  if(notice) $('resNotice').textContent = notice;
+
+  // render results
+  $('resMood').textContent = cust.face+' '+face;
+  $('resReaction').textContent = cust.reactions[tier];
+  const box = $('resLines'); box.innerHTML='';
+  lines.forEach(l=>{
+    const el = document.createElement('div'); el.className='rline';
+    el.innerHTML = `<span>${l.label}</span><span class="amt ${l.amt>=0?'plus':'minus'}">${l.amt>=0?'+':'-'}$${Math.abs(l.amt)}</span>`;
+    box.appendChild(el);
+  });
+  const tot = document.createElement('div'); tot.className='rline rtotal';
+  tot.innerHTML = `<span><b>FINAL PROFIT</b></span><span class="amt ${profit>=0?'plus':'minus'}"><b>${profit>=0?'+':'-'}$${Math.abs(profit)}</b></span>`;
+  box.appendChild(tot);
+  $('resCash').textContent = '$'+P.cash.toLocaleString()+' / $'+P.goal.toLocaleString();
+  $('resGoalFill').style.width = Math.min(100,P.cash/P.goal*100)+'%';
+  show('results');
+  [...box.children].forEach((el,i)=> setTimeout(()=>{ el.classList.add('show'); beep(500+i*60,0.05,'square',0.03); }, 180*i+200));
+  setTimeout(()=>{ beep(523,0.1); beep(659,0.1); setTimeout(()=>beep(784,0.18),110); }, 180*lines.length+400);
+  G = null;
+}
+
+/* =========================================================
+   SHOP
+   ========================================================= */
+function shopNote(txt){
+  const el = $('shopMsg'); el.textContent = txt; el.style.display = 'block';
+  clearTimeout(el._h); el._h = setTimeout(()=>{ el.style.display='none'; }, 3000);
+}
+const AD_NOTES = [
+  'Flyers are up. Check the board for nicer streets.',
+  'Signs planted. Premium blocks are on the board.',
+  'You are in the paper. The estates are calling.'
+];
+function renderShop(){
+  $('shopCash').textContent = '$'+P.cash.toLocaleString();
+  // advertising ladder
+  const al = $('adList'); al.innerHTML='';
+  ADS.forEach((ad,i)=>{
+    const el = document.createElement('div'); el.className='shopitem';
+    el.innerHTML = `<div class="info"><div class="name">${ad.name}</div><div class="desc">${ad.desc}</div></div>`;
+    const b = document.createElement('button');
+    if(P.adTier>i){ b.textContent='RUNNING'; b.className='owned'; b.disabled=true; }
+    else if(P.adTier===i){ b.textContent='$'+ad.cost; b.disabled = P.cash<ad.cost;
+      b.onclick = ()=>{ P.cash-=ad.cost; P.adTier=i+1; saveGame(); renderShop();
+        beep(880,0.1); beep(1174,0.15); shopNote(AD_NOTES[i]); }; }
+    else { b.textContent='LOCKED'; b.disabled=true; el.querySelector('.desc').classList.add('lockdesc'); }
+    el.appendChild(b); al.appendChild(el);
+  });
+  // gear: show what's available now; fold everything still locked into one teaser line
+  const ul = $('upgradeList'); ul.innerHTML='';
+  let lockedNext = null;
+  UPGRADES.forEach(u=>{
+    if(P.jobsDone < u.unlockAt){
+      if(!lockedNext || u.unlockAt < lockedNext) lockedNext = u.unlockAt;
+      return;
+    }
+    const owned = has(u.id);
+    const needs = u.requires && !has(u.requires);
+    const el = document.createElement('div'); el.className='shopitem';
+    el.innerHTML = `<div class="info"><div class="name">${u.name}</div><div class="desc${needs?' lockdesc':''}">${needs?'Requires '+UPGRADES.find(x=>x.id===u.requires).name:u.desc}</div></div>`;
+    const b = document.createElement('button');
+    if(owned){ b.textContent='OWNED'; b.className='owned'; b.disabled=true; }
+    else { b.textContent='$'+u.cost; b.disabled = P.cash<u.cost || needs;
+      b.onclick = ()=>{ P.cash-=u.cost; P.upgrades.push(u.id); saveGame(); renderShop(); beep(880,0.1); beep(1174,0.15); }; }
+    el.appendChild(b); ul.appendChild(el);
+  });
+  if(lockedNext!==null){
+    const lockedCount = UPGRADES.filter(u=>P.jobsDone < u.unlockAt).length;
+    const tease = document.createElement('div'); tease.className='shopitem';
+    tease.innerHTML = `<div class="info"><div class="name lockdesc">🔒 ${lockedCount} more in the shed</div>`+
+      `<div class="desc lockdesc">Keep mowing. New gear shows up at ${lockedNext} jobs done (you: ${P.jobsDone}).</div></div>`;
+    ul.appendChild(tease);
+  }
+  const sl = $('skinList'); sl.innerHTML='';
+  COSMETICS.forEach(c=>{
+    const owned = P.cosmeticsOwned.includes(c.id), equipped = P.equippedSkin===c.id;
+    const el = document.createElement('div'); el.className='shopitem';
+    el.innerHTML = `<div class="info"><div class="name"><span style="color:${c.colors.body}">■</span> ${c.name}</div><div class="desc">${c.desc}</div></div>`;
+    const b = document.createElement('button');
+    if(equipped){ b.textContent='EQUIPPED'; b.className='owned'; b.disabled=true; }
+    else if(owned){ b.textContent='EQUIP'; b.onclick=()=>{ P.equippedSkin=c.id; saveGame(); renderShop();
+      shopNote(`${c.name} equipped. ${c.desc}`); }; }
+    else { b.textContent='$'+c.cost; b.disabled = P.cash<c.cost;
+      b.onclick = ()=>{ P.cash-=c.cost; P.cosmeticsOwned.push(c.id); P.equippedSkin=c.id; saveGame(); renderShop();
+        beep(880,0.1); shopNote(`${c.name} equipped. ${c.desc}`); }; }
+    el.appendChild(b); sl.appendChild(el);
+  });
+  // easter egg collection
+  const eb = $('eggBox'); eb.innerHTML='';
+  EGGS.forEach(e=>{
+    const owned = P.eggs.includes(e.id);
+    const slot = document.createElement('span'); slot.className='eggslot';
+    slot.textContent = owned ? e.icon : '❓';
+    slot.title = owned ? e.name : 'Not found yet';
+    eb.appendChild(slot);
+  });
+  const found = P.eggs.length;
+  const cap = document.createElement('div');
+  cap.style.cssText='font-size:11px;color:#94a1b2;margin-top:6px';
+  cap.textContent = found===0 ? 'Mow lawns. Find weird stuff. It is out there.'
+    : `${found}/${EGGS.length} found. ${found===EGGS.length?'You have mowed everything there is to mow.':''}`;
+  eb.appendChild(cap);
+}
+
+/* ---------- wiring ---------- */
+$('startJobBtn').onclick = ()=> startJob(currentJob);
+$('briefBackBtn').onclick = ()=> show('home');
+$('shopBtn').onclick = ()=>{ renderShop(); showTab('gear'); show('shop'); };
+$('shopBackBtn').onclick = ()=>{ rollJobBoard(); renderHome(); show('home'); };
+// ---------- share card ----------
+let lastSummary = null;
+$('shareBtn').addEventListener('click', ()=>{
+  if(!lastSummary) return;
+  const sc = document.createElement('canvas'); sc.width = 640; sc.height = 360;
+  const c2 = sc.getContext('2d');
+  c2.fillStyle = '#1a1c2c'; c2.fillRect(0,0,640,360);
+  c2.fillStyle = '#29366f'; c2.fillRect(16,16,608,328);
+  c2.strokeStyle = '#000'; c2.lineWidth = 6; c2.strokeRect(16,16,608,328);
+  c2.textAlign = 'center'; c2.fillStyle = '#38b764';
+  c2.font = 'bold 40px "Courier New", monospace';
+  c2.fillText('GRASS ROUTE', 320, 72);
+  c2.fillStyle = '#f4f4f4'; c2.font = '22px "Courier New", monospace';
+  c2.fillText(lastSummary.face + '  ' + lastSummary.jobName, 320, 120);
+  c2.fillStyle = lastSummary.profit >= 0 ? '#38b764' : '#b13e53';
+  c2.font = 'bold 72px "Courier New", monospace';
+  c2.fillText((lastSummary.profit>=0?'+$':'-$') + Math.abs(lastSummary.profit), 320, 205);
+  c2.fillStyle = '#c8d0e0'; c2.font = '20px "Courier New", monospace';
+  c2.fillText(lastSummary.cutPct + '% mowed  ·  ' + lastSummary.highlight, 320, 252);
+  c2.fillStyle = '#94a1b2'; c2.font = '16px "Courier New", monospace';
+  c2.fillText('a lawn care hustle sim', 320, 310);
+  sc.toBlob(blob => {
+    const file = new File([blob], 'grass-route-haul.png', {type:'image/png'});
+    if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+      navigator.share({files:[file], title:'Grass Route'}).catch(()=>{});
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'grass-route-haul.png'; a.click();
+      URL.revokeObjectURL(a.href);
+    }
+  });
+});
+
+// ---------- settings ----------
+function renderSettings(){
+  $('sfxBtn').textContent = '🔊 SFX: ' + (P.settings.sfx?'ON':'OFF');
+  $('musicBtn').textContent = '🎵 MUSIC: ' + (P.settings.music?'ON':'OFF') + (has('cdPlayer')?'':' (needs CD Player)');
+}
+$('sfxBtn').onclick = ()=>{ P.settings.sfx = !P.settings.sfx; saveGame(); renderSettings(); if(P.settings.sfx) beep(880,0.08); };
+$('musicBtn').onclick = ()=>{ P.settings.music = !P.settings.music; saveGame(); renderSettings(); if(!P.settings.music) stopMusic(); };
+
+// ---------- win screen ----------
+let pendingWin = false;
+const WIN_PAYOFFS = {
+  travel:  'Buy the ticket. Send the lawns a postcard.',
+  sidebiz: 'The empire starts Monday. You already know how to work.',
+  college: 'Go learn something. The mower will wait.'
+};
+function renderWin(){
+  const g = GOAL_OPTIONS.find(x=>x.name===P.goalName);
+  $('winSub').textContent = '$'+P.goal.toLocaleString()+'. One lawn at a time.';
+  $('winStats').innerHTML =
+    `${g?g.icon:'🎯'} <b>${P.goalName}</b>: funded<br>`+
+    `🚜 Lawns mowed: <b>${P.jobsDone}</b><br>`+
+    `📦 Weird stuff found: <b>${P.eggs.length}/${EGGS.length}</b>`;
+  $('winPayoff').textContent = WIN_PAYOFFS[g?g.id:'college'] || WIN_PAYOFFS.college;
+}
+$('winHomeBtn').onclick = ()=>{ rollJobBoard(); renderHome(); show('home'); };
+
+$('resHomeBtn').onclick = ()=>{
+  if(pendingWin){ pendingWin = false; renderWin(); show('win');
+    beep(523,0.12); beep(659,0.12); setTimeout(()=>beep(784,0.15),130); setTimeout(()=>beep(1046,0.25),280);
+    return; }
+  rollJobBoard(); renderHome(); show('home');
+};
+$('resShopBtn').onclick = ()=>{ renderShop(); showTab('gear'); show('shop'); };
+
+// ---------- garage tabs ----------
+function showTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
+  document.querySelectorAll('.tabpage').forEach(p=>p.classList.toggle('active', p.id==='tab-'+name));
+}
+document.querySelectorAll('.tab').forEach(t=> t.onclick = ()=>showTab(t.dataset.tab) );
+
+// ---------- setup screen (new game) ----------
+let setupGoal = 'college';
+function renderSetup(){
+  const gr = $('goalRow'); gr.innerHTML='';
+  GOAL_OPTIONS.forEach(g=>{
+    const el = document.createElement('div');
+    el.className = 'goalcard'+(g.id===setupGoal?' sel':'');
+    el.innerHTML = `<span class="gi">${g.icon}</span><span><div class="gname">${g.name}</div>
+      <div class="gdesc">${g.desc}</div></span><span class="gamt">$${g.amount.toLocaleString()}</span>`;
+    el.onclick = ()=>{ setupGoal = g.id; renderSetup(); };
+    gr.appendChild(el);
+  });
+}
+document.querySelectorAll('.charbtn').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('.charbtn').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel');
+  };
+});
+$('setupGoBtn').onclick = ()=>{
+  P.playerGender = document.querySelector('.charbtn.sel').dataset.g;
+  P.playerName = ($('nameInput').value.trim() || 'Kid').slice(0,12);
+  const g = GOAL_OPTIONS.find(x=>x.id===setupGoal);
+  P.goal = g.amount; P.goalName = g.name;
+  saveGame();
+  rollJobBoard(); renderHome(); show('home');
+  beep(523,0.1); beep(659,0.1);
+};
+
+const FLAVORS = [
+  'Tip: not every blade of grass is worth your time. Profit is the score.',
+  'Tip: poop is money. Gross money.',
+  'Tip: the gold mower changes nothing and costs everything.',
+  'Tip: big branches jam the mower. Your back works fine. Pick them up.',
+  'Tip: sprinklers spray on a timer. Mow their corner early.',
+  'Tip: advertising pays for itself. Probably. The flyers guy said so.',
+  'Tip: there is weird stuff buried in these lawns. Keep mowing.'
+];
+loadSave();
+rollJobBoard();
+renderHome();
+renderSettings();
+$('homeFlavor').textContent = pick(FLAVORS);
+if(!P.playerName){ renderSetup(); show('setup'); }
+</script>
+</body>
+</html>
