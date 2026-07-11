@@ -515,9 +515,8 @@ function makeJob(custId, name){
     ? {cols:ARCHETYPES[archetype].cols, rows:ARCHETYPES[archetype].rows}
     : {cols:12, rows:tier>=3 ? 16 : 14};
   const basePay = Math.round(randi(c.basePay[0], c.basePay[1]) * PAY_MULT[tier]);
-  // grandparents (and sometimes anyone) need a small favor doing
-  const deed = (custId==='grandma'||custId==='grandpa') ? pick(DEEDS)
-    : (lvl>=2 && Math.random()<0.15 ? pick(DEEDS) : null);
+  // grandparents come out onto the lawn and need a small favor doing
+  const deed = (custId==='grandma'||custId==='grandpa') ? pick(DEEDS) : null;
   return {
     id: Math.random().toString(36).slice(2),
     name: name || pick(JOB_NAMES),
@@ -601,7 +600,7 @@ function openBrief(job){
   $('briefDetails').innerHTML =
     `🏡 ${ARCHETYPES[job.archetype].name}: ${ARCHETYPES[job.archetype].desc}<br>`+
     (job.special ? `<span style="color:var(--gold)">📌 Special request: ${SPECIALS[job.special].brief}</span><br>` : '')+
-    (job.deed ? `<span style="color:#ff8fb1">🤝 A favor: ${job.deed.ask} Grab the ${job.deed.icon} for +$8.</span><br>` : '')+
+    (job.deed ? `<span style="color:#ff8fb1">🤝 A favor: ${job.deed.ask} Catch them out on the lawn for +$8 (and do not mow them).</span><br>` : '')+
     `${WEATHER[job.weather].icon} ${WEATHER[job.weather].label}: ${WEATHER[job.weather].brief}<br>`+
     `💵 Base pay: <b class="cash">$${job.basePay}</b>${job.tier?' <span style="color:var(--gold)">'+'⭐'.repeat(job.tier)+' nicer street</span>':''}<br>`+
     `🥈 Good money here: <b class="cash">~$${job.par}</b>${P.bests&&P.bests[job.customerType]?' <span style="color:#94a1b2">(your best: $'+P.bests[job.customerType]+')</span>':''}<br>`+
@@ -726,11 +725,7 @@ function buildYard(job){
     const p = freeTile();
     if(p) obstacles.push({type:'egg', r:p.r, c:p.c, alive:true, revealed:false, item:pick(EGGS)});
   }
-  // good deed: a favor sitting out in the yard, near the edge like a real one
-  if(job.deed){
-    const p = freeTile();
-    if(p) obstacles.push({type:'deed', r:p.r, c:p.c, alive:true, revealed:true, deed:job.deed});
-  }
+  // (grandparent favors are handled by a wandering NPC, not a static object)
   // special request setups
   if(job.special==='hiddenToys'){
     for(let i=0;i<5;i++){
@@ -784,10 +779,14 @@ function startJob(job){
     movers:[],
     nextBall: (!job.tutorial && (job.obstacleCounts.toy||0)>0 && Math.random()<0.5) ? 10 : Infinity,
     nextSquirrel: (!job.tutorial && job.level>=3 && Math.random()<0.4) ? 15 : Infinity,
+    // grandparent shuffles around the lawn carrying their favor
+    elder: job.deed ? { x:TILE*1.5, y:TILE*1.5, tx:TILE*1.5, ty:TILE*1.5, nextThink:0,
+      face: CUSTOMERS[job.customerType].face, given:false, lastLine:0 } : null,
     tutStep: job.tutorial ? 0 : -1,
     over:false
   };
   if(job.special==='dogLoose') toast('🐕 Barnaby has been deployed.', 2000);
+  if(G.elder) toast(G.elder.face+' '+CUSTOMERS[job.customerType].name+' is out here. '+job.deed.ask, 2600);
   $('tutHint').style.display = job.tutorial ? 'block' : 'none';
   if(job.tutorial) $('tutHint').textContent = '🕹️ Drag anywhere on the grass (or WASD) to mow';
   startMusic();
@@ -991,6 +990,31 @@ function update(dt, now){
     }
   }
 
+  // grandparent: shuffles slowly around the lawn. Reach them to do the favor.
+  if(G.elder){
+    const el = G.elder;
+    if(now > el.nextThink){ el.nextThink = now + rand(2.5,4.5);
+      el.tx = rand(TILE, cvs.width-TILE); el.ty = rand(TILE, cvs.height-TILE); }
+    const edx = el.tx-el.x, edy = el.ty-el.y, edl = Math.hypot(edx,edy);
+    if(edl>3){ el.x += edx/edl*20*dt; el.y += edy/edl*20*dt; }   // a genuine shuffle
+    const near = Math.hypot(el.x-m.x, el.y-m.y);
+    if(!el.given && near < TILE*0.9){
+      el.given = true; G.deedDone = true;
+      G.pickups.push({label: G.job.deed.done, bonus: OBSTACLE_DEFS.deed.pickupBonus});
+      toast('🤝 '+G.job.deed.done+'. +$'+OBSTACLE_DEFS.deed.pickupBonus);
+      beep(659,0.1,'triangle',0.05); setTimeout(()=>beep(880,0.14,'triangle',0.05),90); buzz(20);
+      for(let i=0;i<12;i++) G.particles.push({x:el.x, y:el.y-6,
+        vx:rand(-45,45), vy:rand(-70,-15), life:0.8, color:'#ff8fb1'});
+    }
+    // soft block: you cannot mow grandma. The mower just stalls, and she has words.
+    if(near < TILE*0.55){
+      m.vx *= 0.15; m.vy *= 0.15;
+      if(now - el.lastLine > 3.5){ el.lastLine = now;
+        toast(pick(['🚫 "Watch it, speed racer."','🚫 "You will mow your own foot."',
+          '🚫 "In my day we looked where we mowed."','🚫 "Careful now, sweetheart."'])); }
+    }
+  }
+
   // moving hazards: stray balls and an armed squirrel
   if(now > G.nextBall){
     G.nextBall = now + rand(14,22);
@@ -1186,16 +1210,6 @@ $('pickupBtn').addEventListener('click', ()=>{
   const o = nearestPickup(); if(!o) return;
   o.alive = false;
   const def = OBSTACLE_DEFS[o.type];
-  if(o.type==='deed'){
-    G.deedDone = true;
-    G.pickups.push({label:o.deed.done, bonus:def.pickupBonus});
-    toast('🤝 '+o.deed.done+'. +$'+def.pickupBonus); buzz(20);
-    // warm little chime, not the cleanup blip
-    beep(659,0.1,'triangle',0.05); setTimeout(()=>beep(880,0.14,'triangle',0.05),90);
-    for(let i=0;i<8;i++) G.particles.push({x:o.c*TILE+TILE/2, y:o.r*TILE+TILE/2,
-      vx:rand(-40,40), vy:rand(-60,-15), life:0.7, color:'#ff8fb1'});
-    return;
-  }
   G.pickups.push({label:'Picked up '+(def.single||def.label), bonus:def.pickupBonus});
   toast(def.icon+' +$'+def.pickupBonus+' cleanup'); beep(880,0.08,'square',0.05); beep(1100,0.08,'square',0.04); buzz(20);
 });
@@ -1358,14 +1372,6 @@ function render(now){
       }
       continue;
     }
-    if(o.type==='deed'){
-      // a soft pink glow so the favor reads as "go here", not "hazard"
-      const px=o.c*TILE+TILE/2, py=o.r*TILE+TILE/2;
-      ctx.fillStyle='rgba(255,143,177,'+(0.25+0.15*Math.sin(now*4))+')';
-      ctx.beginPath(); ctx.arc(px,py,TILE*0.6,0,7); ctx.fill();
-      ctx.fillText(o.deed.icon, px, py);
-      continue;
-    }
     ctx.fillText(OBSTACLE_DEFS[o.type].icon, o.c*TILE+TILE/2, o.r*TILE+TILE/2);
   }
   // particles
@@ -1400,6 +1406,16 @@ function render(now){
   if(G.dog){
     ctx.font='22px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('🐕', G.dog.x, G.dog.y + Math.sin(now*10)*2);
+  }
+  // the grandparent, shuffling, with what they need floating above (a heart once helped)
+  if(G.elder){
+    const el = G.elder, bob = Math.sin(now*5)*1.5;
+    if(!el.given){ ctx.fillStyle='rgba(255,143,177,'+(0.22+0.13*Math.sin(now*4))+')';
+      ctx.beginPath(); ctx.arc(el.x, el.y, TILE*0.62, 0, 7); ctx.fill(); }
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='24px serif'; ctx.fillText(el.face, el.x, el.y + bob);
+    ctx.font='15px serif';
+    ctx.fillText(el.given ? '💗' : G.job.deed.icon, el.x, el.y - TILE*0.7 + Math.sin(now*3)*2);
   }
 
   // shed (drawn over its blocked tiles)
