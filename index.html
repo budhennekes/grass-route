@@ -315,8 +315,30 @@ const CUSTOMERS = {
       meh:'"It is fine dear. Barnaby got out again, did he not."',
       mad:'"Oh honey. Oh no. Oh honey."'
     }
+  },
+  grandpa: {
+    id:'grandpa', name:'Kind Grandpa', face:'👴',
+    basePay:[24,30], requiredCut:0.85, tipMult:2.2,
+    quote:'"Take your time. Nobody your age is in a hurry, right?"',
+    trait:'Pays like grandma, tips like grandma. Usually needs a hand with something.',
+    speedBonusMult:1,
+    reactions:{
+      love:'"Attaboy. Here, take the whole jar of quarters."',
+      happy:'"Good work. Reminds me of my Army days, somehow."',
+      meh:'"It will do. My knees would not have done better."',
+      mad:'"That is alright. We all have our off days, son."'
+    }
   }
 };
+
+// ---------- DATA: Good deeds (small favors on grandparent lawns) ----------
+const DEEDS = [
+  {id:'paper', icon:'📰', ask:'"Fetch my newspaper while you are out there? The porch is a mile away."', done:'Brought up the newspaper'},
+  {id:'trash', icon:'🗑️', ask:'"Roll the trash cans up from the curb? My back is retired too."',        done:'Rolled the cans up'},
+  {id:'cat',   icon:'🐈', ask:'"If you see Mittens, shoo her back inside. She is an escape artist."',    done:'Wrangled Mittens'},
+  {id:'plant', icon:'🪴', ask:'"Set my fallen plant back on the step? The wind got it again."',          done:'Rescued the potted plant'},
+  {id:'mail',  icon:'📬', ask:'"Grab the mail from the box? Bills mostly. Grab them anyway."',           done:'Grabbed the mail'}
+];
 
 // ---------- DATA: Obstacles (defs mirror Obstacle struct) ----------
 const OBSTACLE_DEFS = {
@@ -329,7 +351,8 @@ const OBSTACLE_DEFS = {
   hose:      {label:'garden hose',  icon:'🐍', damageCost:0,  canPickup:false, note:'Run it over: mower jam'},
   flowers:   {label:'flower bed',   icon:'🌷', damageCost:8,  canPickup:false, note:'Drive through it: -$8 per flower'},
   anthill:   {label:'anthills',     icon:'🐜', damageCost:0,  canPickup:false, note:'Mow one and find out'},
-  egg:       {label:'???',          icon:'✨', damageCost:0,  canPickup:false, note:'Secret'}   // hidden collectible, never listed
+  egg:       {label:'???',          icon:'✨', damageCost:0,  canPickup:false, note:'Secret'},  // hidden collectible, never listed
+  deed:      {label:'a favor',      single:'favor',       icon:'🤝', damageCost:0,  canPickup:true,  pickupBonus:8, note:'A neighborly good deed. Bring it home for +$8 and a warm heart'}
 };
 
 // ---------- DATA: Upgrades (unlockAt = jobs completed before it appears) ----------
@@ -492,10 +515,13 @@ function makeJob(custId, name){
     ? {cols:ARCHETYPES[archetype].cols, rows:ARCHETYPES[archetype].rows}
     : {cols:12, rows:tier>=3 ? 16 : 14};
   const basePay = Math.round(randi(c.basePay[0], c.basePay[1]) * PAY_MULT[tier]);
+  // grandparents (and sometimes anyone) need a small favor doing
+  const deed = (custId==='grandma'||custId==='grandpa') ? pick(DEEDS)
+    : (lvl>=2 && Math.random()<0.15 ? pick(DEEDS) : null);
   return {
     id: Math.random().toString(36).slice(2),
     name: name || pick(JOB_NAMES),
-    level: lvl, tier, weather, archetype, special,
+    level: lvl, tier, weather, archetype, special, deed,
     payMult: PAY_MULT[tier],
     customerType: custId,
     basePay,
@@ -521,7 +547,7 @@ function makeContract(){
   const c = pick(CONTRACTS);
   const j = makeJob('dad', c.name);
   return Object.assign(j, {
-    isContract:true, archetype:'contract', special:null,
+    isContract:true, archetype:'contract', special:null, deed:null,
     cols:12, rows:18, timeLimit:180, basePay:c.pay, par:Math.round(c.pay*1.3), tier:0, payMult:2.5,
     requiredCutPercent:0.75,
     obstacleCounts:{rock:4, branch:4, bigbranch:2, toy:2, poop:3, sprinkler:2, hose:1, flowers:1, anthill:2},
@@ -531,7 +557,9 @@ function makeContract(){
 function rollJobBoard(){
   if(P.jobsDone===0){ jobBoard = [makeTutorialJob()]; return; }
   const names = [...JOB_NAMES].sort(()=>Math.random()-0.5);
-  jobBoard = ['dad','retiree','grandma'].map((c,i)=>makeJob(c, names[i]));
+  // the third slot is a grandparent — grandma or grandpa, either needs a hand
+  const elder = Math.random()<0.5 ? 'grandma' : 'grandpa';
+  jobBoard = ['dad','retiree',elder].map((c,i)=>makeJob(c, names[i]));
   jobBoard.sort(()=>Math.random()-0.5);
   if(P.jobsDone>=8 && Math.random()<0.3) jobBoard.push(makeContract());
 }
@@ -554,7 +582,7 @@ function renderHome(){
     const stars = job.isContract ? '💼 ' : (job.tier ? '⭐'.repeat(job.tier)+' ' : '');
     const numHint = IS_TOUCH ? '' : `<span style="color:#94a1b2">[${idx+1}]</span> `;
     el.innerHTML = `<div class="jobtop"><span class="jobname">${numHint}${c.face} ${job.name}</span><span class="jobpay">${stars}~$${job.basePay}</span></div>
-      <div class="jobhaz">${WEATHER[job.weather].icon} ${c.name} · ${ARCHETYPES[job.archetype].name}${job.special?' · 📌':''} · ${hazIcons||'no hazards'}</div>
+      <div class="jobhaz">${WEATHER[job.weather].icon} ${c.name} · ${ARCHETYPES[job.archetype].name}${job.special?' · 📌':''}${job.deed?' · 🤝':''} · ${hazIcons||'no hazards'}</div>
       <div class="jobquote">${job.specialRequest}</div>`;
     el.onclick = ()=>openBrief(job);
     list.appendChild(el);
@@ -573,6 +601,7 @@ function openBrief(job){
   $('briefDetails').innerHTML =
     `🏡 ${ARCHETYPES[job.archetype].name}: ${ARCHETYPES[job.archetype].desc}<br>`+
     (job.special ? `<span style="color:var(--gold)">📌 Special request: ${SPECIALS[job.special].brief}</span><br>` : '')+
+    (job.deed ? `<span style="color:#ff8fb1">🤝 A favor: ${job.deed.ask} Grab the ${job.deed.icon} for +$8.</span><br>` : '')+
     `${WEATHER[job.weather].icon} ${WEATHER[job.weather].label}: ${WEATHER[job.weather].brief}<br>`+
     `💵 Base pay: <b class="cash">$${job.basePay}</b>${job.tier?' <span style="color:var(--gold)">'+'⭐'.repeat(job.tier)+' nicer street</span>':''}<br>`+
     `🥈 Good money here: <b class="cash">~$${job.par}</b>${P.bests&&P.bests[job.customerType]?' <span style="color:#94a1b2">(your best: $'+P.bests[job.customerType]+')</span>':''}<br>`+
@@ -697,6 +726,11 @@ function buildYard(job){
     const p = freeTile();
     if(p) obstacles.push({type:'egg', r:p.r, c:p.c, alive:true, revealed:false, item:pick(EGGS)});
   }
+  // good deed: a favor sitting out in the yard, near the edge like a real one
+  if(job.deed){
+    const p = freeTile();
+    if(p) obstacles.push({type:'deed', r:p.r, c:p.c, alive:true, revealed:true, deed:job.deed});
+  }
   // special request setups
   if(job.special==='hiddenToys'){
     for(let i=0;i<5;i++){
@@ -741,7 +775,7 @@ function startJob(job){
     damages:[],          // {label, cost}
     pickups:[],          // {label, bonus}
     lastHoseJam:0, lastBumpJam:0,
-    particles:[], shake:0, callout:null,
+    particles:[], shake:0, callout:null, deedDone:false,
     nextSpray: 8,
     weather: job.weather, antsUntil:0, nextRainWet:0,
     stripeV:0, stripeH:0, glowPenalized:false,
@@ -1152,6 +1186,16 @@ $('pickupBtn').addEventListener('click', ()=>{
   const o = nearestPickup(); if(!o) return;
   o.alive = false;
   const def = OBSTACLE_DEFS[o.type];
+  if(o.type==='deed'){
+    G.deedDone = true;
+    G.pickups.push({label:o.deed.done, bonus:def.pickupBonus});
+    toast('🤝 '+o.deed.done+'. +$'+def.pickupBonus); buzz(20);
+    // warm little chime, not the cleanup blip
+    beep(659,0.1,'triangle',0.05); setTimeout(()=>beep(880,0.14,'triangle',0.05),90);
+    for(let i=0;i<8;i++) G.particles.push({x:o.c*TILE+TILE/2, y:o.r*TILE+TILE/2,
+      vx:rand(-40,40), vy:rand(-60,-15), life:0.7, color:'#ff8fb1'});
+    return;
+  }
   G.pickups.push({label:'Picked up '+(def.single||def.label), bonus:def.pickupBonus});
   toast(def.icon+' +$'+def.pickupBonus+' cleanup'); beep(880,0.08,'square',0.05); beep(1100,0.08,'square',0.04); buzz(20);
 });
@@ -1314,6 +1358,14 @@ function render(now){
       }
       continue;
     }
+    if(o.type==='deed'){
+      // a soft pink glow so the favor reads as "go here", not "hazard"
+      const px=o.c*TILE+TILE/2, py=o.r*TILE+TILE/2;
+      ctx.fillStyle='rgba(255,143,177,'+(0.25+0.15*Math.sin(now*4))+')';
+      ctx.beginPath(); ctx.arc(px,py,TILE*0.6,0,7); ctx.fill();
+      ctx.fillText(o.deed.icon, px, py);
+      continue;
+    }
     ctx.fillText(OBSTACLE_DEFS[o.type].icon, o.c*TILE+TILE/2, o.r*TILE+TILE/2);
   }
   // particles
@@ -1468,7 +1520,7 @@ function endJob(early){
   // customer mood + tip
   const dmgCount = G.damages.length;
   const shortfall = Math.max(0, job.requiredCutPercent - cutPct)*100;
-  const mood = 100 - dmgCount*12 - shortfall*1.5 + (edgeDone?5:0);
+  const mood = 100 - dmgCount*12 - shortfall*1.5 + (edgeDone?5:0) + (G.deedDone?15:0);
   let tier, face;
   if(mood>=88){ tier='love'; face='🤩'; } else if(mood>=65){ tier='happy'; face='😊'; }
   else if(mood>=40){ tier='meh'; face='😐'; } else { tier='mad'; face='😤'; }
