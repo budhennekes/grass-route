@@ -12,9 +12,15 @@
     --grass-dark:#2e7d32; --grass-light:#66bb4a;
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{height:100%;overflow:hidden;background:var(--bg)}
-  body{font-family:"Courier New",monospace;color:var(--ink);display:flex;justify-content:center}
-  #app{width:100%;max-width:430px;height:100%;display:flex;flex-direction:column;position:relative;background:var(--bg)}
+  /* the kid's bedroom fills the whole viewport behind everything */
+  html{height:100%;overflow:hidden;background:#12131f url('room.png') center center / cover no-repeat;}
+  /* body is a translucent dim layer over the room so the dark UI theme still reads */
+  body{height:100%;overflow:hidden;font-family:"Courier New",monospace;color:var(--ink);
+    display:flex;justify-content:center;
+    background:linear-gradient(rgba(12,14,26,0.34),rgba(12,14,26,0.5));}
+  #app{width:100%;max-width:430px;height:100%;display:flex;flex-direction:column;position:relative;
+    background:rgba(14,16,30,0.34);backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px);
+    box-shadow:0 0 70px rgba(0,0,0,0.65);}
   .screen{position:absolute;inset:0;display:none;flex-direction:column;overflow-y:auto;padding:16px 14px calc(20px + env(safe-area-inset-bottom))}
   .screen.active{display:flex}
   h1{font-size:30px;letter-spacing:2px;color:var(--green);text-shadow:3px 3px 0 #14532d;text-align:center}
