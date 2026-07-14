@@ -950,16 +950,21 @@ function update(dt, now){
   m.vx += (tvx - m.vx) * Math.min(1, accel);
   m.vy += (tvy - m.vy) * Math.min(1, accel);
 
-  // move with axis-separated collision (slides along solids)
+  // move with axis-separated collision. Zero the axis velocity whenever a move is
+  // stopped — by a wall OR a solid — so nothing stays pinned against an edge.
   const half = TILE*0.32;
-  if(Math.abs(m.vx) > 1 || Math.abs(m.vy) > 1){
-    const nx = m.x + m.vx*dt, ny = m.y + m.vy*dt;
-    const tx = tileAt(nx,m.y), ty = tileAt(m.x,ny);
-    if(tx && !isSolid(tx.r,tx.c)) m.x = Math.max(half, Math.min(cvs.width-half, nx));
-    else { m.vx = 0; bump(now); }
-    if(ty && !isSolid(ty.r,ty.c)) m.y = Math.max(half, Math.min(cvs.height-half, ny));
-    else { m.vy = 0; bump(now); }
-  }
+  // X axis
+  const nx = m.x + m.vx*dt;
+  const cx = Math.max(half, Math.min(cvs.width-half, nx));   // clamp to canvas bounds
+  const tx = tileAt(cx, m.y);
+  if(tx && !isSolid(tx.r, tx.c)){ m.x = cx; if(cx !== nx) m.vx = 0; }   // moved (hit wall? drop vx)
+  else { if(tx && isSolid(tx.r, tx.c)) bump(now); m.vx = 0; }           // solid tile: stop, drop vx
+  // Y axis
+  const ny = m.y + m.vy*dt;
+  const cy = Math.max(half, Math.min(cvs.height-half, ny));
+  const ty = tileAt(m.x, cy);
+  if(ty && !isSolid(ty.r, ty.c)){ m.y = cy; if(cy !== ny) m.vy = 0; }
+  else { if(ty && isSolid(ty.r, ty.c)) bump(now); m.vy = 0; }
 
   // cut current tile (+ neighbors with wide deck)
   const cells = [tileAt(m.x,m.y)];
