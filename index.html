@@ -770,7 +770,7 @@ function startJob(job){
     damages:[],          // {label, cost}
     pickups:[],          // {label, bonus}
     lastHoseJam:0, lastBumpJam:0,
-    particles:[], shake:0, callout:null, deedDone:false,
+    particles:[], shake:0, callout:null, deedDone:false, autoFinishAt:0,
     nextSpray: 8,
     weather: job.weather, antsUntil:0, nextRainWet:0,
     stripeV:0, stripeH:0, glowPenalized:false,
@@ -1095,6 +1095,9 @@ function update(dt, now){
   if(near){ pb.disabled=false; pb.textContent = 'PICK UP '+OBSTACLE_DEFS[near.type].icon+KEY_HINT; }
   else { pb.disabled=true; pb.textContent='PICK UP'+KEY_HINT; }
 
+  // auto-finish once the whole lawn is cut (after the little celebration beat)
+  if(G.autoFinishAt && now >= G.autoFinishAt && !G.over){ endJob(true); return; }
+
   // timer
   G.timeLeft -= dt;
   $('hudTime').textContent = Math.max(0,Math.ceil(G.timeLeft));
@@ -1193,6 +1196,14 @@ function cutTile(r,c,now){
   // mow tone climbs with the streak, then caps so it never gets shrill
   if(now - lastCutBeep > 0.085){ lastCutBeep = now;
     beep(600 + Math.min(340, G.combo*6), 0.03, 'square', 0.022); buzz(4); }
+  // whole lawn cut: celebrate and auto-finish (no need to hit DONE)
+  if(G.cutCount >= G.totalGrass && !G.autoFinishAt){
+    G.autoFinishAt = now + 0.9;
+    G.callout = {text:'LAWN COMPLETE!', at:now};
+    G.shake = Math.max(G.shake, 5);
+    [784,988,1318,1568].forEach((f,i)=> setTimeout(()=>beep(f,0.12,'triangle',0.05), i*90));
+    buzz([40,30,60]);
+  }
   updateHud();
 }
 
